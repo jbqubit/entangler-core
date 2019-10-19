@@ -66,7 +66,8 @@ repos:
         name: pylint (code content "linter")
         # allow code style, refactoring, and TODO issues to pass commit
         # allow redefined-outer-name for pytest
-        args: ["-d C,R,fixme,redefined-outer-name,"]
+        # no-member because migen Modules don't have the .comb,.sync, etc attrs
+        args: ["-d C,R,fixme,redefined-outer-name,no-member"]
         entry: python -m pylint.__main__
         language: system
         types: [python]

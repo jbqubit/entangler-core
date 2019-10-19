@@ -1,6 +1,7 @@
-from migen import *
-from entangler.core import *
+from migen import Module
+from migen import run_simulation
 
+from entangler.core import MainStateMachine
 
 
 def msm_master_test(dut):
@@ -12,6 +13,7 @@ def msm_master_test(dut):
         if i == 5:
             yield dut.slave_ready.eq(1)
         yield
+
 
 def msm_slave_test(dut):
     yield dut.m_end.eq(10)
@@ -34,7 +36,7 @@ class MsmPair(Module):
             self.master.slave_ready_raw.eq(self.slave.ready),
             self.slave.trigger_in_raw.eq(self.master.trigger_out),
             self.slave.success_in_raw.eq(self.master.success),
-            self.slave.timeout_in_raw.eq(self.master.timeout)
+            self.slave.timeout_in_raw.eq(self.master.timeout),
         ]
 
 
@@ -59,7 +61,7 @@ def msm_standalone_test(dut):
         for i in range(100):
             if i == 40 and allow_success:
                 yield dut.herald.eq(1)
-            if i>40 and (yield dut.done_stb):
+            if i > 40 and (yield dut.done_stb):
                 finished = True
             yield
         yield dut.herald.eq(0)
@@ -74,7 +76,6 @@ def msm_standalone_test(dut):
 
     # Check timeout works
     yield from run(False)
-
 
 
 def msm_pair_test(dut):
@@ -92,15 +93,15 @@ def msm_pair_test(dut):
         success_slave = False
         t_slave_done = None
         for i in range(200):
-            if i==t_start_master:
+            if i == t_start_master:
                 yield dut.master.run_stb.eq(1)
-            elif i==t_start_master+1:
+            elif i == t_start_master + 1:
                 yield dut.master.run_stb.eq(0)
-            if i==t_start_slave:
+            if i == t_start_slave:
                 yield dut.slave.run_stb.eq(1)
-            elif i==t_start_slave+1:
+            elif i == t_start_slave + 1:
                 yield dut.slave.run_stb.eq(0)
-            if t_herald and i==t_herald:
+            if t_herald and i == t_herald:
                 yield dut.master.herald.eq(1)
 
             if (yield dut.master.done_stb):
@@ -127,10 +128,10 @@ def msm_pair_test(dut):
 
         # Master and slave should finish at the same time (modulo registering offsets)
         # on success, this is obvious
-        # without success, when the master times out it should stop the slave - 
+        # without success, when the master times out it should stop the slave -
         # this can only occur if the master times out before the slave
         if success or t_start_slave > t_start_master:
-            assert t_master_done == t_slave_done-2
+            assert t_master_done == t_slave_done - 2
 
     # Start at different times, but sync up and agree on success
     yield from run(t_start_master=10, t_start_slave=20, t_herald=80)
@@ -141,7 +142,6 @@ def msm_pair_test(dut):
 
     # Time out without success, master timing out first
     yield from run(t_start_master=10, t_start_slave=60, t_herald=None)
-
 
 
 if __name__ == "__main__":

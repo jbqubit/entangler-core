@@ -1,5 +1,9 @@
-from migen import *
-from entangler.core import *
+from migen import If
+from migen import Module
+from migen import run_simulation
+from migen import Signal
+
+from entangler.core import EntanglerCore
 
 
 class MockPhy(Module):
@@ -12,10 +16,11 @@ class MockPhy(Module):
         self.sync += [
             self.stb_rising.eq(0),
             self.fine_ts.eq(0),
-            If(counter==self.t_event[3:],
+            If(
+                counter == self.t_event[3:],
                 self.stb_rising.eq(1),
-                self.fine_ts.eq(self.t_event[:3])
-            )
+                self.fine_ts.eq(self.t_event[:3]),
+            ),
         ]
 
 
@@ -28,12 +33,20 @@ class StandaloneHarness(Module):
         self.submodules.phy_apd2 = MockPhy(self.counter)
         self.submodules.phy_apd3 = MockPhy(self.counter)
         self.submodules.phy_ref = MockPhy(self.counter)
-        input_phys = [self.phy_apd0, self.phy_apd1, self.phy_apd2, self.phy_apd3, self.phy_ref]
+        input_phys = [
+            self.phy_apd0,
+            self.phy_apd1,
+            self.phy_apd2,
+            self.phy_apd3,
+            self.phy_ref,
+        ]
 
         core_link_pads = None
         output_pads = None
         passthrough_sigs = None
-        self.submodules.core = EntanglerCore(core_link_pads, output_pads, passthrough_sigs, input_phys, simulate=True)
+        self.submodules.core = EntanglerCore(
+            core_link_pads, output_pads, passthrough_sigs, input_phys, simulate=True
+        )
 
         self.comb += self.counter.eq(self.core.msm.m)
 
@@ -58,11 +71,11 @@ def standalone_test(dut):
     yield dut.core.apd_gaters[1].gate_start.eq(18)
     yield dut.core.apd_gaters[1].gate_stop.eq(30)
 
-    yield dut.phy_ref.t_event.eq( 1000 )
-    yield dut.phy_apd0.t_event.eq( 1000 )
-    yield dut.phy_apd1.t_event.eq( 1000 )
-    yield dut.phy_apd2.t_event.eq( 1000 )
-    yield dut.phy_apd3.t_event.eq( 1000 )
+    yield dut.phy_ref.t_event.eq(1000)
+    yield dut.phy_apd0.t_event.eq(1000)
+    yield dut.phy_apd1.t_event.eq(1000)
+    yield dut.phy_apd2.t_event.eq(1000)
+    yield dut.phy_apd3.t_event.eq(1000)
 
     yield dut.core.heralder.patterns[0].eq(0b0101)
     yield dut.core.heralder.pattern_ens[0].eq(1)
@@ -73,18 +86,21 @@ def standalone_test(dut):
     yield
     yield dut.core.msm.run_stb.eq(0)
 
+    for _ in range(50):
+        yield
+
+    yield dut.phy_ref.t_event.eq(8 * 10 + 3)
+    yield dut.phy_apd0.t_event.eq(8 * 10 + 3 + 18)
+    yield dut.phy_apd1.t_event.eq(8 * 10 + 3 + 30)
+    yield dut.phy_apd2.t_event.eq(8 * 10 + 3 + 30)
+    yield dut.phy_apd3.t_event.eq(8 * 10 + 3 + 30)
+
     for i in range(50):
         yield
 
-    yield dut.phy_ref.t_event.eq( 8*10+3 )
-    yield dut.phy_apd0.t_event.eq( 8*10+3 + 18)
-    yield dut.phy_apd1.t_event.eq( 8*10+3 + 30)
-    yield dut.phy_apd2.t_event.eq( 8*10+3 + 30)
-    yield dut.phy_apd3.t_event.eq( 8*10+3 + 30)
-
-    for i in range(50):
-        yield
 
 if __name__ == "__main__":
     dut = StandaloneHarness()
-    run_simulation(dut, standalone_test(dut), vcd_name="core_standalone.vcd",  clocks={"sys": 8})
+    run_simulation(
+        dut, standalone_test(dut), vcd_name="core_standalone.vcd", clocks={"sys": 8}
+    )
