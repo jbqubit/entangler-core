@@ -1,0 +1,72 @@
+repos:
+  # Basic file type & housekeeping checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.3.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-ast
+      - id: check-builtin-literals
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-xml
+      - id: check-yaml
+      - id: check-json
+      - id: check-docstring-first
+      - id: debug-statements
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: name-tests-test
+      - id: requirements-txt-fixer
+      - id: trailing-whitespace
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.1.6
+    hooks:
+      - id: remove-tabs
+
+  # Python formatting hooks
+  - repo: https://github.com/psf/black
+    rev: 19.3b0
+    hooks:
+      - id: black
+        name: Format Python ('black' formatter)
+        language_version: python3.6
+        # VERY opinionated Python formatter, but makes it easy to use/consistent
+  - repo: https://github.com/myint/docformatter
+    rev: v1.2
+    hooks:
+      - id: docformatter
+        name: Python docstring formatter
+        args: ["--wrap-summaries", "88", "--wrap-descriptions", "88"]
+  - repo: https://github.com/asottile/reorder_python_imports
+    rev: v1.6.1
+    hooks:
+      - id: reorder-python-imports
+
+  # Python content/style checks
+  - repo: https://github.com/pre-commit/pygrep-hooks
+    rev: v1.4.1
+    hooks:
+      - id: python-no-eval
+      - id: python-no-log-warn
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.3.0
+    hooks:
+      - id: flake8
+        args: [--max-line-length=88]
+  - repo: https://github.com/chewse/pre-commit-mirrors-pydocstyle
+    rev: v2.1.1
+    hooks:
+      - id: pydocstyle
+        name: Check docstrings (pydocstyle)
+  - repo: local
+    hooks:
+      # pylint must be local because it needs to import modules
+      - id: pylint
+        name: pylint (code content "linter")
+        # allow code style, refactoring, and TODO issues to pass commit
+        # allow redefined-outer-name for pytest
+        args: ["-d C,R,fixme,redefined-outer-name,"]
+        entry: python -m pylint.__main__
+        language: system
+        types: [python]
