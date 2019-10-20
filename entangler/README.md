@@ -1,10 +1,6 @@
-- Test:
-    - Does the core time-out correctly if only master or slave running
-    - Do the master and slave cores agree on the number of cycles
-    - Do the master and slave cores synchronize
+# Entangler Gateware Notes
 
-
----
+## Timestamp Configuration
 
 Input timestamp resolution is 1ns
 Max cycle length is ~10us
@@ -13,6 +9,7 @@ So lets use 14 bits per timestamp (16.38us max)
 Core should only be enabled after sensible values are loaded into the registers.
 E.g. if n_cycles=0 when the core is enabled it will saturate the ififo with timeout events...
 
+## Coredevice Driver/Register Notes
 
 Registers:
 0b0000 : Config : w:
@@ -34,5 +31,4 @@ Each has 14 bits t_start, 14 bits t_end -> 32 bits (to align top to dword)
 
 So bits[4:3] = 0 for low reg writes, 1 for timing reg writes, 2 for status reads, 3 for timestamp reads
 
-
-The smallest time stamp that is valid for output events is 1 (0 makes the output stay off permantly)
+The smallest time stamp that is valid for output events is 1 (0 makes the output stay off permanently)
