@@ -128,8 +128,8 @@ class InputGater(Module):
         ]
 
 
-class Heralder(Module):
-    """Asserts 'herald' if input vector matches any pattern in patterns."""
+class PatternMatcher(Module):
+    """Asserts 'match' if input vector matches any pattern in patterns."""
 
     def __init__(self, n_sig=4, n_patterns=1):
         """Define pattern matching gateware."""
@@ -138,14 +138,14 @@ class Heralder(Module):
         self.pattern_ens = Signal(n_patterns)
         self.matches = Signal(n_patterns)
 
-        self.herald = Signal()
+        self.is_match = Signal()
 
         # # #
 
         self.comb += [
             self.matches[i].eq(p == self.sig) for i, p in enumerate(self.patterns)
         ]
-        self.comb += self.herald.eq(self.pattern_ens & self.matches != 0)
+        self.comb += self.is_match.eq(self.pattern_ens & self.matches != 0)
 
 
 class MainStateMachine(Module):
@@ -318,7 +318,7 @@ class EntanglerCore(Module):
             InputGater(self.msm.m, phy_422pulse, phy_apd) for phy_apd in phy_apds
         ]
 
-        self.submodules.heralder = Heralder(n_sig=4, n_patterns=4)
+        self.submodules.heralder = PatternMatcher(n_sig=4, n_patterns=4)
 
         if not simulate:
             # To be able to trigger the pulse picker from both systems without
@@ -423,7 +423,7 @@ class EntanglerCore(Module):
             sequencer.clear.eq(self.msm.cycle_starting) for sequencer in self.sequencers
         ]
 
-        self.comb += self.msm.herald.eq(self.heralder.herald)
+        self.comb += self.msm.herald.eq(self.heralder.is_match)
 
         # 422ps trigger event counter. We use got_ref from the first gater for
         # convenience (any other channel would work just as well).
