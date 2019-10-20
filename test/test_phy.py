@@ -1,3 +1,4 @@
+"""Test the :class:`entangler.phy.Entangler` functionality."""
 from migen import If
 from migen import Module
 from migen import run_simulation
@@ -7,6 +8,7 @@ from entangler.phy import Entangler
 
 
 def rtio_output_event(rtlink, addr, data):
+    """Simulate a RTIO output event happening on the RTIO bus."""
     yield rtlink.o.address.eq(addr)
     yield rtlink.o.data.eq(data)
     yield rtlink.o.stb.eq(1)
@@ -15,7 +17,10 @@ def rtio_output_event(rtlink, addr, data):
 
 
 class MockPhy(Module):
+    """Mock an ARTIQ PHY module."""
+
     def __init__(self, counter):
+        """Define the basic logic for a PHY module."""
         self.fine_ts = Signal(3)
         self.stb_rising = Signal()
         self.t_event = Signal(32)
@@ -33,7 +38,10 @@ class MockPhy(Module):
 
 
 class PhyHarness(Module):
+    """PHY Test Harness for :class:`entangler.phy.Entangler`."""
+
     def __init__(self):
+        """Connect the mocked PHY devices to this device."""
         self.counter = Signal(32)
 
         self.submodules.phy_apd0 = MockPhy(self.counter)
@@ -67,6 +75,8 @@ ADDR_TIMING = 0b1000
 
 
 def test_basic(dut):
+    """Test the entire :mod:`entangler` gateware basic functionality works."""
+    # Helper functions for state machine testing
     def out(addr, data):
         yield from rtio_output_event(dut.core.rtlink, addr, data)
 
@@ -117,9 +127,12 @@ def test_basic(dut):
 
 
 def test_timeout(dut):
-    """Test that timeout works as the timeout is swept to occur at all possible
-    points in the state machine operation"""
+    """Test that :mod:`entangler` timeout works.
 
+    Sweeps the timeout is swept to occur at all possible points in the
+    state machine operation.
+    """
+    # Declare internal helper functions.
     def out(addr, data):
         yield from rtio_output_event(dut.core.rtlink, addr, data)
 

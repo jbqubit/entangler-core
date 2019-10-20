@@ -1,3 +1,4 @@
+"""Test the output event scheduler :class:`entangler.core.ChannelSequencer`."""
 from migen import Module
 from migen import run_simulation
 from migen import Signal
@@ -6,12 +7,16 @@ from entangler.core import ChannelSequencer
 
 
 class ChannelSequencerHarness(Module):
+    """Test harness for the :class:`ChannelSequencer`."""
+
     def __init__(self):
+        """Wrap & provide passthroughs for the :class:`ChannelSequencer`."""
         self.m = Signal(10)
         self.submodules.core = ChannelSequencer(self.m)
 
 
 def channel_sequencer_test(dut):
+    """Test the outputs of a :class:`ChannelSequencer`."""
     yield dut.core.clear.eq(1)
     yield dut.core.m_start.eq(10)
     yield dut.core.m_stop.eq(30)

@@ -1,3 +1,4 @@
+"""Test the entangler state machine logic in :class`entangler.core.MainStateMachine`."""
 from migen import Module
 from migen import run_simulation
 
@@ -5,6 +6,7 @@ from entangler.core import MainStateMachine
 
 
 def msm_master_test(dut):
+    """Test the main state machine in master configuration."""
     yield dut.m_end.eq(10)
     yield dut.is_master.eq(1)
     yield dut.time_remaining.eq(100)
@@ -16,6 +18,7 @@ def msm_master_test(dut):
 
 
 def msm_slave_test(dut):
+    """Test the state machine in slave configuration."""
     yield dut.m_end.eq(10)
     yield dut.is_master.eq(1)
     yield dut.cycles_remaining.eq(3)
@@ -27,7 +30,10 @@ def msm_slave_test(dut):
 
 
 class MsmPair(Module):
+    """Create a master/slave pair of state machines in one gateware module."""
+
     def __init__(self):
+        """Instantiate the modules for the master/slave state machines."""
         self.submodules.master = MainStateMachine()
         self.submodules.slave = MainStateMachine()
 
@@ -41,6 +47,7 @@ class MsmPair(Module):
 
 
 def msm_standalone_test(dut):
+    """Test the ``Entangler`` state machine logic in standalone mode."""
     yield dut.m_end.eq(10)
     yield dut.is_master.eq(1)
     yield dut.standalone.eq(1)
@@ -79,6 +86,7 @@ def msm_standalone_test(dut):
 
 
 def msm_pair_test(dut):
+    """Test the master/slave state machines working together."""
     yield dut.master.m_end.eq(10)
     yield dut.slave.m_end.eq(10)
     yield dut.master.time_remaining_buf.eq(100)

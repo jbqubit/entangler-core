@@ -29,6 +29,7 @@ class ChannelSequencer(Module):
     """
 
     def __init__(self, m):
+        """Output a signal for a given time."""
         self.m_start = Signal(counter_width)
         self.m_stop = Signal(counter_width)
         self.clear = Signal()
@@ -71,6 +72,7 @@ class InputGater(Module):
     """
 
     def __init__(self, m, phy_ref, phy_sig):
+        """Define the gateware to gate & latch inputs."""
         self.clear = Signal()
 
         self.triggered = Signal()
@@ -127,9 +129,10 @@ class InputGater(Module):
 
 
 class Heralder(Module):
-    """Asserts 'herald' if input vector matches any pattern in patterns"""
+    """Asserts 'herald' if input vector matches any pattern in patterns."""
 
     def __init__(self, n_sig=4, n_patterns=1):
+        """Define pattern matching gateware."""
         self.sig = Signal(n_sig)
         self.patterns = [Signal(n_sig) for _ in range(n_patterns)]
         self.pattern_ens = Signal(n_patterns)
@@ -146,7 +149,10 @@ class Heralder(Module):
 
 
 class MainStateMachine(Module):
+    """State machine to run the entanglement generation process."""
+
     def __init__(self, counter_width=10):
+        """Define the state machine logic for running the input & output sequences."""
         self.m = Signal(counter_width)  # Global cycle-relative time.
         self.time_remaining = Signal(32)  # Clock cycles remaining before timeout
         self.time_remaining_buf = Signal(32)
@@ -288,9 +294,16 @@ class MainStateMachine(Module):
 
 
 class EntanglerCore(Module):
+    """Highest block of the :mod:`entangler` gateware.
+
+    This top-level block incorporates all the other subcomponents in this file,
+    and is the primary one that should be used by end-users.
+    """
+
     def __init__(
         self, core_link_pads, output_pads, passthrough_sigs, input_phys, simulate=False
     ):
+        """Define the submodules & connections between them to form an ``Entangler``."""
         self.enable = Signal()
         # # #
 

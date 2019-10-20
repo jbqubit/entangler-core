@@ -1,3 +1,4 @@
+"""Test the :class:`entangler.core.Heralder` properly pattern matches."""
 from migen import run_simulation
 
 from entangler.core import Heralder
@@ -7,6 +8,7 @@ n_sig = 4
 
 
 def heralder_test(dut):
+    """Test pattern recognition in the :class:`Heralder`."""
     for i, p in enumerate(patterns):
         yield dut.patterns[i].eq(p)
     yield

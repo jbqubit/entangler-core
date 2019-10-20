@@ -12,15 +12,24 @@ from entangler.core import EntanglerCore
 
 
 class Entangler(Module):
+    """A module that can be plugged into the ARTIQ gateware build process.
+
+    It takes inputs from the ARTIQ RTIO bus, and passes them into the lower level
+    Entangler class (:class:`.core.EntanglerCore`).
+    """
+
     def __init__(
         self, core_link_pads, output_pads, passthrough_sigs, input_phys, simulate=False
     ):
         """
-        core_link_pads: EEM pads for inter-Kasli link
-        output_pads: pads for 4 output signals (422sigma, 1092, 422 ps trigger, aux)
-        passthrough_sigs: signals from output phys, connected to output_pads when core
-            not running
-        input_phys: serdes phys for 5 inputs – APD0-3 and 422ps trigger in
+        Define the interface between an ARTIQ RTIO bus and low-level gateware.
+
+        Args:
+            core_link_pads: EEM pads for inter-Kasli link
+            output_pads: pads for 4 output signals (422sigma, 1092, 422 ps trigger, aux)
+            passthrough_sigs: signals from output phys, connected to output_pads when
+                core not running
+            input_phys: serdes phys for 5 inputs – APD0-3 and 422ps trigger in
         """
         self.rtlink = rtlink.Interface(
             rtlink.OInterface(data_width=32, address_width=5, enable_replace=False),
@@ -84,7 +93,7 @@ class Entangler(Module):
                 # Write herald patterns and enables
                 *[
                     self.core.heralder.patterns[i].eq(
-                        self.rtlink.o.data[4 * i : 4 * (i + 1)]
+                        self.rtlink.o.data[4 * i : 4 * (i + 1)]  # noqa
                     )
                     for i in range(4)
                 ],

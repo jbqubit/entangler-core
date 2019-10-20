@@ -1,3 +1,4 @@
+"""Test the :class:`entangler.core.EntanglerCore` functionality."""
 from migen import If
 from migen import Module
 from migen import run_simulation
@@ -7,7 +8,10 @@ from entangler.core import EntanglerCore
 
 
 class MockPhy(Module):
+    """Mock an ARTIQ PHY module."""
+
     def __init__(self, counter):
+        """Define the basic logic for a PHY module."""
         self.fine_ts = Signal(3)
         self.stb_rising = Signal()
         self.t_event = Signal(32)
@@ -25,7 +29,10 @@ class MockPhy(Module):
 
 
 class StandaloneHarness(Module):
+    """Test harness for the ``EntanglerCore``."""
+
     def __init__(self):
+        """Pass through signals to an ``EntanglerCore`` instance."""
         self.counter = Signal(32)
 
         self.submodules.phy_apd0 = MockPhy(self.counter)
@@ -52,6 +59,7 @@ class StandaloneHarness(Module):
 
 
 def standalone_test(dut):
+    """Test the standalone :class:``EntanglerCore`` works properly."""
     yield dut.core.msm.m_end.eq(20)
     yield dut.core.msm.is_master.eq(1)
     yield dut.core.msm.standalone.eq(1)
@@ -95,7 +103,7 @@ def standalone_test(dut):
     yield dut.phy_apd2.t_event.eq(8 * 10 + 3 + 30)
     yield dut.phy_apd3.t_event.eq(8 * 10 + 3 + 30)
 
-    for i in range(50):
+    for _ in range(50):
         yield
 
 

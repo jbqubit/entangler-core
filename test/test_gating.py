@@ -1,3 +1,4 @@
+"""Test the :class:`entangler.core.InputGater` properly register input events."""
 from migen import If
 from migen import Module
 from migen import run_simulation
@@ -7,7 +8,10 @@ from entangler.core import InputGater
 
 
 class MockPhy(Module):
+    """Mock an ARTIQ PHY module."""
+
     def __init__(self, counter):
+        """Define the basic logic for a PHY module."""
         self.fine_ts = Signal(3)
         self.stb_rising = Signal()
         self.t_event = Signal(32)
@@ -25,7 +29,10 @@ class MockPhy(Module):
 
 
 class GaterHarness(Module):
+    """Test harness to wrap & pass signals to an ``InputGater``."""
+
     def __init__(self):
+        """Create a test harness for the :class:`InputGater`."""
         self.m = Signal(14)
         self.rst = Signal()
         self.sync += [self.m.eq(self.m + 1), If(self.rst, self.m.eq(0))]
@@ -39,6 +46,7 @@ class GaterHarness(Module):
 
 
 def gater_test(dut, gate_start=None, gate_stop=None, t_ref=None, t_sig=None):
+    """Test an ``InputGater`` correctly registers inputs."""
     yield dut.core.gate_start.eq(gate_start)
     yield dut.core.gate_stop.eq(gate_stop)
     yield dut.phy_ref.t_event.eq(t_ref)
