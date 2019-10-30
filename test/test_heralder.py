@@ -25,5 +25,5 @@ def pattern_match_test(dut):
 
 
 if __name__ == "__main__":
-    dut = PatternMatcher(n_sig=n_sig, n_patterns=len(patterns))
+    dut = PatternMatcher(num_inputs=n_sig, num_patterns=len(patterns))
     run_simulation(dut, pattern_match_test(dut), vcd_name="heralder.vcd")

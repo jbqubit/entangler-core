@@ -131,12 +131,12 @@ class InputGater(Module):
 class PatternMatcher(Module):
     """Asserts 'match' if input vector matches any pattern in patterns."""
 
-    def __init__(self, n_sig=4, n_patterns=1):
+    def __init__(self, num_inputs=4, num_patterns=1):
         """Define pattern matching gateware."""
-        self.sig = Signal(n_sig)
-        self.patterns = [Signal(n_sig) for _ in range(n_patterns)]
-        self.pattern_ens = Signal(n_patterns)
-        self.matches = Signal(n_patterns)
+        self.sig = Signal(num_inputs)
+        self.patterns = [Signal(num_inputs) for _ in range(num_patterns)]
+        self.pattern_ens = Signal(num_patterns)
+        self.matches = Signal(num_patterns)
 
         self.is_match = Signal()
 
@@ -318,7 +318,7 @@ class EntanglerCore(Module):
             InputGater(self.msm.m, phy_422pulse, phy_apd) for phy_apd in phy_apds
         ]
 
-        self.submodules.heralder = PatternMatcher(n_sig=4, n_patterns=4)
+        self.submodules.heralder = PatternMatcher(num_inputs=4, num_patterns=4)
 
         if not simulate:
             # To be able to trigger the pulse picker from both systems without
