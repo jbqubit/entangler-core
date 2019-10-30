@@ -4,7 +4,9 @@
 
 Input timestamp resolution is 1ns
 Max cycle length is ~10us
-So lets use 14 bits per timestamp (16.38us max)
+So lets use 14 bits per timestamp (16.38us max).
+    * 11 upper bits are for the coarse timestamp (8 ns resolution),
+    * 3 lowest bits are for the fine timestamp (< 8 ns resolution).
 
 Core should only be enabled after sensible values are loaded into the registers.
 E.g. if n_cycles=0 when the core is enabled it will saturate the ififo with timeout events...
@@ -29,6 +31,10 @@ Each has 14 bits t_start, 14 bits t_end -> 32 bits (to align top to dword)
 5x timestamps: r: 14 bits each
 0b11_000 ... 0b11_100
 
-So bits[4:3] = 0 for low reg writes, 1 for timing reg writes, 2 for status reads, 3 for timestamp reads
+So bits[4:3]:
+    * ``2'd0`` for low reg writes
+    * ``2'd1`` for timing reg writes
+    * ``2'd2`` for status reads
+    * ``2'd3`` for timestamp reads
 
 The smallest time stamp that is valid for output events is 1 (0 makes the output stay off permanently)
