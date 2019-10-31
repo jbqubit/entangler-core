@@ -34,13 +34,17 @@ timestamp_422ps = 0b11000+4
 
 
 class Entangler:
-    """Sequences remote entanglement experiments between a master and a slave
-
-    :param channel: RTIO channel number
-    :param is_master: Is this Kasli the sequencer master or the slave
-    :param core_device: Core device name
-    """
+    """Sequences remote entanglement experiments between a master and a slave."""
     def __init__(self, dmgr, channel, is_master=True, core_device="core"):
+        """Fast sequencer for generating remote entanglement.
+
+        Args:
+            dmgr (artiq.DeviceManager): ARTIQ device manager
+            channel (int): RTIO channel number
+            is_master (bool, optional): Is this Kasli the sequencer master or the
+                slave. Defaults to True.
+            core_device (str, optional): Core device name. Defaults to "core".
+        """
         self.core = dmgr.get(core_device)
         self.channel = channel
         self.is_master = is_master
@@ -49,6 +53,7 @@ class Entangler:
 
     @kernel
     def init(self):
+        """Initialize the ``Entangler`` core gateware settings."""
         self.set_config() # Write is_master
 
     @kernel
@@ -57,19 +62,24 @@ class Entangler:
 
         This method advances the timeline by one coarse RTIO cycle.
 
-        :param addr: parameter address.
-        :param value: Data to be written.
+        Args:
+            addr: parameter memory address.
+            value: Data to be written.
         """
         rtio_output((self.channel << 8) | addr, value)
         delay_mu(self.ref_period_mu)
 
     @kernel
     def read(self, addr):
-        """Read parameter
+        """Read parameter.
 
         This method does not advance the timeline but consumes all slack.
 
-        :param addr: Memory location address.
+        Args:
+            addr: Memory location address.
+
+        Returns:
+            Value of the ``Entangler`` setting (register) that you are querying.
         """
         rtio_output((self.channel << 8) | addr, 0)
         return rtio_input_data(self.channel)
@@ -78,11 +88,12 @@ class Entangler:
     def set_config(self, enable=False, standalone=False):
         """Configure the core
 
-        enable: allow core to drive outputs (otherwise they are connected to
-            normal TTLOut phys). Do not enable if the cycle length and timing
-            parameters are not set.
-        standalone: don't attempt syncronisation with partner, just run when
-            ready. Used for testing and single-trap mode
+        Args:
+            enable: allow core to drive outputs (otherwise they are connected to
+                normal TTLOut phys). Do not enable if the cycle length and timing
+                parameters are not set.
+            standalone: don't attempt synchronization with partner, just run when
+                ready. Used for testing and single-trap mode.
         """
         data = 0
         if enable:
@@ -125,7 +136,8 @@ class Entangler:
     def set_timing(self, channel, t_start, t_stop):
         """Set the output channel timing and relative gate times.
 
-        Times are in seconds. See set_timing_mu() for details"""
+        Times are in seconds. See set_timing_mu() for details.
+        """
         t_start_mu = np.int32(self.core.seconds_to_mu(t_start))
         t_stop_mu = np.int32(self.core.seconds_to_mu(t_stop))
         self.set_timing_mu(channel, t_start_mu, t_stop_mu)
@@ -135,7 +147,8 @@ class Entangler:
         """Set the entanglement cycle length.
 
         If the herald module does not signal success by this time the loop
-        repeats. Resolution is coarse_ref_period."""
+        repeats. Resolution is coarse_ref_period.
+        """
         t_cycle_mu = t_cycle_mu >> 3
         self.write(ADDR_W_TCYCLE, t_cycle_mu)
 
@@ -143,7 +156,8 @@ class Entangler:
     def set_cycle_length(self, t_cycle):
         """Set the entanglement cycle length.
 
-        Times are in seconds."""
+        Times are in seconds.
+        """
         t_cycle_mu = np.int32(self.core.seconds_to_mu(t_cycle))
         self.set_cycle_length_mu(t_cycle_mu)
 
@@ -156,7 +170,7 @@ class Entangler:
         apd1_a, apd1_b, apd2_a, apd2_b.
         E.g. to set a herald on apd1_a only: set_heralds(0b0001)
         to herald on apd1_b, apd2_b: set_heralds(0b1010)
-        To herald on both: set_heralds(0b0001, 0b1010)
+        To herald on both: set_heralds(0b0001, 0b1010).
         """
         data = 0
         assert len(heralds) <= 4
@@ -167,13 +181,14 @@ class Entangler:
 
     @kernel
     def run_mu(self, duration_mu):
-        """Run the entanglement sequence until success, or duration (in seconds)
+        """Run the entanglement sequence until success, or duration (in mu)
         has elapsed. Blocking.
 
-        Returns a tuple of [timestamp, reason]
-        timestamp is the RTIO time at the end of the final cycle.
-        reason is 0x3fff if there was a timeout, or a bitfield giving the
-        herald matches if there was a success.
+        Returns:
+            tuple of [timestamp, reason].
+            timestamp is the RTIO time at the end of the final cycle.
+            reason is 0x3fff if there was a timeout, or a bitfield giving the
+            herald matches if there was a success.
         """
         duration_mu = duration_mu >> 3
         self.write(ADDR_W_RUN, duration_mu)
@@ -181,9 +196,11 @@ class Entangler:
 
     @kernel
     def run(self, duration):
-        """Run the entanglement sequence. See run_mu() for details.
+        """Run the entanglement sequence.
 
-        Duration is in seconds"""
+        See run_mu() for details.
+        Duration is in seconds.
+        """
         duration_mu = np.int32(self.core.seconds_to_mu(duration))
         return self.run_mu(duration_mu)
 
