@@ -1,7 +1,11 @@
-"""FPGA HDL modules that describe core 'Entangler' functionality."""
+"""FPGA HDL modules that describe core 'Entangler' functionality.
+
+Note: STB = "strobe", I forgot that one.
+"""
 import typing
 
 import migen.build.generic_platform as platform
+from dynaconf import settings
 from migen import Cat
 from migen import FSM
 from migen import If
@@ -12,9 +16,7 @@ from migen import NextState
 from migen import NextValue
 from migen import Signal
 
-# Width of sequence duration counters and the coarse part of input timestamps
-# (units of clock cycles).
-counter_width = 11
+from .config_conversions import max_value_to_bit_width
 
 # The 422ps laser system is shared, so for ease of use we OR the slave's RTIO TTL output
 # with the master's signal as long as the entangler core isn't active. The timing will
@@ -46,8 +48,8 @@ class ChannelSequencer(Module):
             m: a ``counter_width`` counter :class:`Signal` that governs the output
                 times.
         """
-        self.m_start = Signal(counter_width)
-        self.m_stop = Signal(counter_width)
+        self.m_start = Signal(settings.COARSE_COUNTER_WIDTH)
+        self.m_stop = Signal(settings.COARSE_COUNTER_WIDTH)
         self.clear = Signal()
 
         self.output = Signal()
@@ -74,14 +76,14 @@ class TriggeredInputGater(Module):
     """Event gater that connects to ttl_serdes_generic phys.
 
     The gate is defined as a time window after a reference event occurs.
-    The reference time is that of a rising edge on phy_ref. There is no protection
-    against multiple edges on phy_ref.
-    The gate start and stop are specified as offsets in mu (=1ns mostly) from this
+    The reference time is that of a rising edge on ``phy_ref``. There is no protection
+    against multiple edges on ``phy_ref``.
+    The gate start and stop are specified as offsets in mu (=1 ns mostly) from this
     reference event.
 
     The module is triggered after it has seen a reference event, then subsequently
-    a signal edge in the gate window.
-    Once the module is triggered subsequent signal edges are ignored.
+    a signal edge (from ``phy_sig``) in the gate window.
+    Once the module is triggered, then subsequent signal edges are ignored.
     Clear has to be asserted to clear the reference edge and the triggered flag.
 
     The start gate offset must be at least 8 * mu.
@@ -95,7 +97,9 @@ class TriggeredInputGater(Module):
 
         n_fine = len(phy_ref.fine_ts)
 
-        full_timestamp_width = counter_width + n_fine
+        full_timestamp_width = settings.COARSE_COUNTER_WIDTH + n_fine
+        # TODO: move assertion to where it actually matters, i.e. at PHY level
+        assert full_timestamp_width == settings.FULL_COUNTER_WIDTH
 
         self.ref_ts = Signal(full_timestamp_width)
         self.sig_ts = Signal(full_timestamp_width)
@@ -186,9 +190,10 @@ class MainStateMachine(Module):
         self.m = Signal(counter_width)  # Global cycle-relative time.
         self.time_remaining = Signal(32)  # Clock cycles remaining before timeout
         self.time_remaining_buf = Signal(32)
+        # How many iterations of the loop have completed since last start
         self.cycles_completed = Signal(
-            14
-        )  # How many iterations of the loop have completed since last start
+            max_value_to_bit_width(settings.MAX_CYCLES_PER_RUN)
+        )
 
         self.run_stb = Signal()  # Pulsed to start core running until timeout or success
         self.done_stb = (
@@ -341,7 +346,7 @@ class EntanglerCore(Module):
         """Define the submodules & connections between them to form an ``Entangler``.
 
         Args:
-            core_link_pads (typing.Sequence[platform.Pins]): A list of 4 FPGA pins
+            core_link_pads (typing.Sequence[platform.Pins]): A list of 5 FPGA pins
                 used to link a master & slave ``Entangler`` device.
             output_pads (typing.Sequence[platform.Pins]): The output pins that will
                 be driven by the state machines to output the entanglement generation
@@ -358,21 +363,31 @@ class EntanglerCore(Module):
                 the passthrough_sigs. Defaults to False.
         """
         self.enable = Signal()
+
+        # number of input APDs + 1 for the 422 pulse reference trigger
+        assert len(input_phys) == settings.NUM_INPUT_SIGNALS + 1
+        # TODO: more input length assertions
+        # TODO: fix docs to refer to settings parameter
         # # #
 
-        phy_apds = input_phys[0:4]
-        phy_422pulse = input_phys[4]
+        phy_apds = input_phys[0 : settings.NUM_INPUT_SIGNALS]  # noqa: E203
+        phy_422pulse = input_phys[settings.NUM_INPUT_SIGNALS]
 
         self.submodules.msm = MainStateMachine()
 
-        self.submodules.sequencers = [ChannelSequencer(self.msm.m) for _ in range(4)]
+        self.submodules.sequencers = [
+            ChannelSequencer(self.msm.m) for _ in range(settings.NUM_OUTPUT_CHANNELS)
+        ]
 
         self.submodules.apd_gaters = [
             TriggeredInputGater(self.msm.m, phy_422pulse, phy_apd)
             for phy_apd in phy_apds
         ]
 
-        self.submodules.heralder = PatternMatcher(num_inputs=4, num_patterns=4)
+        self.submodules.heralder = PatternMatcher(
+            num_inputs=settings.NUM_INPUT_SIGNALS,
+            num_patterns=settings.NUM_PATTERNS_ALLOWED,
+        )
 
         if not simulate:
             # To be able to trigger the pulse picker from both systems without
@@ -406,11 +421,12 @@ class EntanglerCore(Module):
             # Connect the "running" output, which is asserted when the core is
             # running, or controlled by the passthrough signal when the core is
             # not running.
+            # TODO: convert to settings
             self.specials += Instance(
                 "OBUFDS",
                 i_I=Mux(self.msm.running, 1, passthrough_sigs[4]),
-                o_O=output_pads[4].p,
-                o_OB=output_pads[4].n,
+                o_O=output_pads[-1].p,
+                o_OB=output_pads[-1].n,
             )
 
             def ts_buf(pad, sig_o, sig_i, en_out):
@@ -481,10 +497,13 @@ class EntanglerCore(Module):
 
         # 422ps trigger event counter. We use got_ref from the first gater for
         # convenience (any other channel would work just as well).
-        self.triggers_received = Signal(14)
+        self.triggers_received = Signal(
+            max_value_to_bit_width(settings.MAX_TRIGGER_COUNTS)
+        )
         self.sync += [
             If(self.msm.run_stb, self.triggers_received.eq(0)).Else(
                 If(
+                    # TODO: convert to parametrized??
                     self.msm.cycle_ending & self.apd_gaters[0].got_ref,
                     self.triggers_received.eq(self.triggers_received + 1),
                 )

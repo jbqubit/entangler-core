@@ -9,22 +9,22 @@ from artiq.coredevice.rtio import rtio_input_timestamped_data
 from artiq.coredevice.rtio import rtio_output
 from artiq.language.core import delay_mu
 from artiq.language.core import kernel
+from dynaconf import settings
 
-# Write only
-ADDR_W_CONFIG = 0
-ADDR_W_RUN = 1
-ADDR_W_TCYCLE = 2
-ADDR_W_HERALD = 3
+# TODO: remove these
+class TimingChannels(enum.IntEnum):
+    """Timing flags/addresses for the Input/Output channels in an :class:`Entangler`."""
 
-# Output channel addresses
-sequencer_422sigma = 0b1000 + 0
-sequencer_1092 = 0b1000 + 1
-sequencer_422ps_trigger = 0b1000 + 2
-sequencer_aux = 0b1000 + 3
-gate_apd0 = 0b1000 + 4
-gate_apd1 = 0b1000 + 5
-gate_apd2 = 0b1000 + 6
-gate_apd3 = 0b1000 + 7
+    # TODO: generate based on settings.NUM_INPUT_SIGNALS & settings.NUM_OUTPUT_CHANNELS
+    sequencer_422sigma = 0b1000 + 0
+    sequencer_1092 = 0b1000 + 1
+    sequencer_422ps_trigger = 0b1000 + 2
+    sequencer_aux = 0b1000 + 3
+    gate_apd0 = 0b1000 + 4
+    gate_apd1 = 0b1000 + 5
+    gate_apd2 = 0b1000 + 6
+    gate_apd3 = 0b1000 + 7
+
 
 # Read only
 ADDR_R_STATUS = 0b10000
@@ -55,6 +55,11 @@ class Entangler:
         self.channel = channel
         self.is_master = is_master
         self.ref_period_mu = self.core.seconds_to_mu(self.core.coarse_ref_period)
+        self._SEQUENCER_TIME_MASK = (1 << settings.FULL_COUNTER_WIDTH) - 1
+        self._ADDRESS_WRITE = settings.ADDRESS_WRITE
+        self._NUM_ALLOWED_HERALDS = settings.NUM_PATTERNS_ALLOWED
+        self._HERALD_LENGTH_MASK = (1 << settings.NUM_PATTERNS_ALLOWED) - 1
+        self._PATTERN_WIDTH = settings.NUM_INPUT_SIGNALS
 
     @kernel
     def init(self):
@@ -108,7 +113,7 @@ class Entangler:
             data |= 1 << 1
         if standalone:
             data |= 1 << 2
-        self.write(ADDR_W_CONFIG, data)
+        self.write(self.ADDRESS_WRITE.CONFIG, data)
 
     @kernel
     def set_timing_mu(self, channel, t_start_mu, t_stop_mu):
@@ -126,16 +131,16 @@ class Entangler:
         length. If the stop is before the start, the pulse stops at the cycle
         length. If the start is after the cycle length there is no pulse.
         """
-        if channel < gate_apd0:
+        if channel < TimingChannels.gate_apd0:
             t_start_mu = t_start_mu >> 3
             t_stop_mu = t_stop_mu >> 3
 
         t_start_mu += 1
         t_stop_mu += 1
 
-        # Truncate to 14 bits
-        t_start_mu &= 0x3FFF
-        t_stop_mu &= 0x3FFF
+        # Truncate to settings.FULL_COUNTER_WIDTH.
+        t_start_mu &= self.sequencer_time_mask
+        t_stop_mu &= self.sequencer_time_mask
         self.write(channel, (t_stop_mu << 16) | t_start_mu)
 
     @kernel
@@ -156,7 +161,7 @@ class Entangler:
         repeats. Resolution is coarse_ref_period.
         """
         t_cycle_mu = t_cycle_mu >> 3
-        self.write(ADDR_W_TCYCLE, t_cycle_mu)
+        self.write(self.ADDRESS_WRITE.TCYCLE, t_cycle_mu)
 
     @kernel
     def set_cycle_length(self, t_cycle):
@@ -183,7 +188,7 @@ class Entangler:
         for i in range(len(heralds)):
             data |= (heralds[i] & 0xF) << (4 * i)
             data |= 1 << (16 + i)
-        self.write(ADDR_W_HERALD, data)
+        self.write(self.ADDRESS_WRITE.HERALD, data)
 
     @kernel
     def run_mu(self, duration_mu):
@@ -202,7 +207,7 @@ class Entangler:
 
         """
         duration_mu = duration_mu >> 3
-        self.write(ADDR_W_RUN, duration_mu)
+        self.write(self.ADDRESS_WRITE.RUN, duration_mu)
         # Following func is only in ARTIQ >= 5, don't have in dev environment
         # pylint: disable=no-name-in-module
         return rtio_input_timestamped_data(np.int64(-1), self.channel)

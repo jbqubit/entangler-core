@@ -1,3 +1,4 @@
 artiq>=5
+dynaconf
 migen
 numpy

@@ -2,25 +2,28 @@
 import os
 import sys
 
+from dynaconf import settings
+from migen import If
+from migen import Module
+from migen import run_simulation
+from migen import Signal
+
 # add gateware simulation tools "module" (at ./helpers/*)
 sys.path.append(os.path.join(os.path.dirname(__file__), "helpers"))
 
 
-from migen import If  # noqa: E402
-from migen import Module  # noqa: E402
-from migen import Signal  # noqa: E402
-from migen import run_simulation  # noqa: E402
-
-from entangler.core import TriggeredInputGater  # noqa: E402
+from entangler.core import InputGater  # noqa: E402
 from gateware_utils import MockPhy  # noqa: E402 pylint: disable=import-error
+
+#  ./helpers/gateware_utils
 
 
 class TriggeredGaterHarness(Module):
     """Test harness to wrap & pass signals to a ``TriggeredInputGater``."""
 
     def __init__(self):
-        """Create a test harness for the :class:`TriggeredInputGater`."""
-        self.m = Signal(14)
+        """Create a test harness for the :class:`InputGater`."""
+        self.m = Signal(settings.FULL_COUNTER_WIDTH)
         self.rst = Signal()
         self.sync += [self.m.eq(self.m + 1), If(self.rst, self.m.eq(0))]
 

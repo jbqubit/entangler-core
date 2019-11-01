@@ -1,0 +1,27 @@
+# Configuration settings for the Entangler gateware.
+# Allows configuring the counter widths, number of inputs & outputs, etc.
+
+[development]
+# Width of sequence duration counters and the coarse part of input timestamps
+# (units of clock cycles).
+COARSE_COUNTER_WIDTH = 11
+# COUNTER_WIDTH + fine_timestamp_width = 11 + 3 = 14
+# Limited in various places to be <= 16 bits, probably don't do more than that.
+FULL_COUNTER_WIDTH = 14
+MAX_CYCLES_PER_RUN = 16383  # 14 bits
+MAX_TRIGGER_COUNTS = 16383  # 14 bits
+
+ADDRESS_WRITE__CONFIG = 0
+ADDRESS_WRITE__RUN = 1
+ADDRESS_WRITE__TCYCLE = 2
+ADDRESS_WRITE__HERALD = 3
+
+ADDRESS_READ__CONFIG = 0
+ADDRESS_READ__RUN = 1
+ADDRESS_READ__NCYCLES = 2
+ADDRESS_READ__HERALDS = 3
+ADDRESS_READ__TIMING = 8    # 0b1000
+
+NUM_INPUT_SIGNALS = 4
+NUM_OUTPUT_CHANNELS = 4
+NUM_PATTERNS_ALLOWED = 4

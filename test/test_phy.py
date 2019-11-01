@@ -1,17 +1,20 @@
 """Test the :class:`entangler.phy.Entangler` functionality."""
 import os
 import sys
+import typing
+
+from dynaconf import settings
+from migen import Module  # noqa: E402
+from migen import run_simulation  # noqa: E402
+from migen import Signal  # noqa: E402
 
 # add gateware simulation tools "module" (at ./helpers/*)
 sys.path.append(os.path.join(os.path.dirname(__file__), "helpers"))
 
 
-from migen import Module  # noqa: E402
-from migen import run_simulation  # noqa: E402
-from migen import Signal  # noqa: E402
-
-from gateware_utils import MockPhy  # noqa: E402 ./helpers/gateware_utils
-from gateware_utils import rtio_output_event  # noqa: E402
+# ./helpers/gateware_utils
+from gateware_utils import MockPhy  # noqa: E402 pylint: disable=import-error
+from gateware_utils import rtio_output_event  # noqa: E402 pylint: disable=import-error
 from entangler.phy import Entangler  # noqa: E402
 
 
@@ -45,6 +48,7 @@ class PhyHarness(Module):
         self.comb += self.counter.eq(self.core.core.msm.m)
 
 
+# TODO: CONVERT TO SETTINGS
 ADDR_CONFIG = 0
 ADDR_RUN = 1
 ADDR_NCYCLES = 2
@@ -58,12 +62,16 @@ def test_basic(dut):
     def out(addr, data):
         yield from rtio_output_event(dut.core.rtlink, addr, data)
 
-    def write_heralds(heralds=None):
+    def write_heralds(heralds: typing.Sequence[int] = None):
         data = 0
+        assert len(heralds) < settings.NUM_PATTERNS_ALLOWED
         for i, h in enumerate(heralds):
-            assert i < 4
-            data |= (1 << i) << (4 * 4)
-            data |= h << (4 * i)
+            # enable bit
+            data |= (1 << i) << (
+                settings.NUM_INPUT_SIGNALS * settings.NUM_PATTERNS_ALLOWED
+            )
+            # move herald to appropriate position in register
+            data |= h << (settings.NUM_INPUT_SIGNALS * i)
         yield from out(ADDR_HERALDS, data)
 
     yield dut.phy_ref.t_event.eq(1000)
@@ -74,7 +82,8 @@ def test_basic(dut):
         yield
     yield from out(ADDR_CONFIG, 0b110)  # disable, standalone
     yield from write_heralds([0b0101, 0b1010, 0b1100, 0b0101])
-    for i in range(4):
+    for i in range(settings.NUM_OUTPUT_CHANNELS):
+        # TODO: decode what this is doing
         yield from out(ADDR_TIMING + i, (2 * i + 2) * (1 << 16) | 2 * i + 1)
     # for i in [0,2]:
     #     yield from out(ADDR_TIMING+4+i, (30<<16) | 18)
@@ -91,6 +100,7 @@ def test_basic(dut):
         #     yield dut.phy_apd1.t_event.eq( 8*10+3 + 30)
         yield
 
+    # TODO: convert to settings
     yield from out(0b10000, 0)  # Read status
     yield
     yield from out(0b10000 + 1, 0)  # Read n_cycles

@@ -2,11 +2,10 @@
 import itertools
 import logging
 
+from dynaconf import settings
 from migen import run_simulation
 
 from entangler.core import PatternMatcher
-
-n_sig = 4
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,23 +29,26 @@ def test_match_one_pattern_set(dut, pattern_set, num_signals):
             )
 
 
-def test_all_possible_patterns(dut, num_patterns):
+def test_all_possible_patterns(dut, num_inputs, num_patterns):
     """Test all possible pattern sets in the :class:`PatternMatcher`.
 
     Args:
         num_patterns: number of patterns that the ``dut`` can match against
     """
-    all_possible_patterns = itertools.permutations(range(2 ** n_sig), num_patterns)
+    all_possible_patterns = itertools.permutations(range(2 ** num_inputs), num_patterns)
 
     for pattern_set in all_possible_patterns:
         _LOGGER.debug("Testing pattern: %s", pattern_set)
-        yield from test_match_one_pattern_set(dut, pattern_set, num_signals=n_sig)
+        yield from test_match_one_pattern_set(dut, pattern_set, num_signals=num_inputs)
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    num_patterns = n_sig
-    dut = PatternMatcher(num_inputs=n_sig, num_patterns=num_patterns)
+    num_patterns = settings.NUM_PATTERNS_ALLOWED
+    num_signals = settings.NUM_INPUT_SIGNALS
+    dut = PatternMatcher(num_inputs=num_signals, num_patterns=num_patterns)
     run_simulation(
-        dut, test_all_possible_patterns(dut, num_patterns), vcd_name="heralder.vcd"
+        dut,
+        test_all_possible_patterns(dut, num_signals, num_patterns),
+        vcd_name="heralder.vcd",
     )
