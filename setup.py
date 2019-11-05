@@ -3,16 +3,15 @@
 You can install this package locally (in development mode) using:
 ``$ pip install -e .``.
 """
-from setuptools import find_packages
-from setuptools import setup
+import setuptools
 
 if __name__ == "__main__":
-    setup(
+    setuptools.setup(
         name="entangler",
         version="0.1",
-        packages=find_packages(),
-        requirements=["migen"],
-        url="https://github.com/OxfordIonTrapGroup/entangler-core",
+        packages=setuptools.find_packages(),
+        requirements=["artiq>=5", "migen", "numpy"],
+        url="https://github.com/drewrisinger/entangler-core",
         setup_requires=["pytest-runner"],
         tests_require=["pytest"],
     )

@@ -1,0 +1,3 @@
+artiq>=5
+migen
+numpy

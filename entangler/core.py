@@ -1,4 +1,7 @@
 """FPGA HDL modules that describe core 'Entangler' functionality."""
+import typing
+
+import migen.build.generic_platform as platform
 from migen import Cat
 from migen import FSM
 from migen import If
@@ -23,13 +26,26 @@ SEQUENCER_IDX_422ps = 2
 class ChannelSequencer(Module):
     """Pulses `output` between the given edge times.
 
-    `m_start`/`m_stop` specify the values of the given counter signal `m` (assumed to be
-    monotonically increasing) between which the output is active. `clear` deasserts the
-    output irrespective of the configured times.
+    The signals ``m_start``/``m_stop`` define the counter ``m`` values between
+    which this module outputs a high signal.
+
+    Assumes that ``m`` is monotonically-increasing.
+
+    Attributes:
+        m_start: value of the counter signal at which to output a high signal
+        m_stop: value of the counter signal at which the output will be set ``LOW``
+        clear: de-asserts the output irrespective of the configured
+            :attr:`m_start`/:attr:`m_stop` times.
+
     """
 
     def __init__(self, m):
-        """Output a signal for a given time."""
+        """Output a signal for a given time.
+
+        Args:
+            m: a ``counter_width`` counter :class:`Signal` that governs the output
+                times.
+        """
         self.m_start = Signal(counter_width)
         self.m_stop = Signal(counter_width)
         self.clear = Signal()
@@ -68,7 +84,7 @@ class InputGater(Module):
     Once the module is triggered subsequent signal edges are ignored.
     Clear has to be asserted to clear the reference edge and the triggered flag.
 
-    The start gate offset must be at least 8mu.
+    The start gate offset must be at least 8 * mu.
     """
 
     def __init__(self, m, phy_ref, phy_sig):
@@ -79,22 +95,24 @@ class InputGater(Module):
 
         n_fine = len(phy_ref.fine_ts)
 
-        self.ref_ts = Signal(counter_width + n_fine)
-        self.sig_ts = Signal(counter_width + n_fine)
+        full_timestamp_width = counter_width + n_fine
+
+        self.ref_ts = Signal(full_timestamp_width)
+        self.sig_ts = Signal(full_timestamp_width)
 
         # In mu
-        self.gate_start = Signal(14)
-        self.gate_stop = Signal(14)
+        self.gate_start = Signal(full_timestamp_width)
+        self.gate_stop = Signal(full_timestamp_width)
 
         # # #
 
         self.got_ref = Signal()
 
         # Absolute gate times, calculated when we get the reference event
-        abs_gate_start = Signal(counter_width + n_fine)
-        abs_gate_stop = Signal(counter_width + n_fine)
+        abs_gate_start = Signal(full_timestamp_width)
+        abs_gate_stop = Signal(full_timestamp_width)
 
-        t_ref = Signal(counter_width + n_fine)
+        t_ref = Signal(full_timestamp_width)
         self.comb += t_ref.eq(Cat(phy_ref.fine_ts, m))
 
         self.sync += [
@@ -111,7 +129,7 @@ class InputGater(Module):
         past_window_start = Signal()
         before_window_end = Signal()
         triggering = Signal()
-        t_sig = Signal(counter_width + n_fine)
+        t_sig = Signal(full_timestamp_width)
         self.comb += [
             t_sig.eq(Cat(phy_sig.fine_ts, m)),
             past_window_start.eq(t_sig >= abs_gate_start),
@@ -129,7 +147,19 @@ class InputGater(Module):
 
 
 class PatternMatcher(Module):
-    """Asserts 'match' if input vector matches any pattern in patterns."""
+    """Checks if input vector matches any pattern in patterns.
+
+    Attributes:
+        sig (:class:`Signal`(num_inputs)): input signal to match against
+        patterns ([:class:`Signal`(num_inputs)] * num_patterns): patterns to match
+            input signal against
+        pattern_ens (:class:`Signal`(num_patterns)): enables matching for
+            the specified pattern (one-hot encoding).
+        matches (:class:`Signal`(num_patterns)): Outputs the patterns that matched
+            the input
+        is_match (:class:`Signal`): Asserted when any pattern matches.
+
+    """
 
     def __init__(self, num_inputs=4, num_patterns=1):
         """Define pattern matching gateware."""
@@ -301,9 +331,32 @@ class EntanglerCore(Module):
     """
 
     def __init__(
-        self, core_link_pads, output_pads, passthrough_sigs, input_phys, simulate=False
+        self,
+        core_link_pads: typing.Sequence[platform.Pins],
+        output_pads: typing.Sequence[platform.Pins],
+        passthrough_sigs: typing.Sequence[Signal],
+        input_phys: typing.Sequence["PHY"],
+        simulate: bool = False,
     ):
-        """Define the submodules & connections between them to form an ``Entangler``."""
+        """Define the submodules & connections between them to form an ``Entangler``.
+
+        Args:
+            core_link_pads (typing.Sequence[platform.Pins]): A list of 4 FPGA pins
+                used to link a master & slave ``Entangler`` device.
+            output_pads (typing.Sequence[platform.Pins]): The output pins that will
+                be driven by the state machines to output the entanglement generation
+                signals.
+            passthrough_sigs (typing.Sequence[Signal]): The signals that should be
+                passed through to the ``output_pads`` when the ``Entangler`` is not
+                running.
+            input_phys (typing.Sequence["PHY"]): TTLInput physical gateware modules
+                that register an input TTL event. Expects a list of 4, with
+                the first 4 being the input APD/TTL signals, and the last one
+                as a sync signal with the entanglement laser.
+            simulate (bool, optional): If this should be instantiated in
+                simulation mode. If it is simulated, it disables several options like
+                the passthrough_sigs. Defaults to False.
+        """
         self.enable = Signal()
         # # #
 
