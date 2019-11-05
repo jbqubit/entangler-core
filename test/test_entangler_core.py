@@ -1,31 +1,17 @@
 """Test the :class:`entangler.core.EntanglerCore` functionality."""
-from migen import If
-from migen import Module
-from migen import run_simulation
-from migen import Signal
+import os
+import sys
 
-from entangler.core import EntanglerCore
+# add gateware simulation tools "module" (at ./helpers/*)
+sys.path.append(os.path.join(os.path.dirname(__file__), "helpers"))
 
 
-class MockPhy(Module):
-    """Mock an ARTIQ PHY module."""
+from migen import Module  # noqa: E402
+from migen import run_simulation  # noqa: E402
+from migen import Signal  # noqa: E402
 
-    def __init__(self, counter):
-        """Define the basic logic for a PHY module."""
-        self.fine_ts = Signal(3)
-        self.stb_rising = Signal()
-        self.t_event = Signal(32)
-
-        # # #
-        self.sync += [
-            self.stb_rising.eq(0),
-            self.fine_ts.eq(0),
-            If(
-                counter == self.t_event[3:],
-                self.stb_rising.eq(1),
-                self.fine_ts.eq(self.t_event[:3]),
-            ),
-        ]
+from entangler.core import EntanglerCore  # noqa: E402
+from gateware_utils import MockPhy  # noqa: E402 ./helpers/gateware_utils
 
 
 class StandaloneHarness(Module):
