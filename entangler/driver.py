@@ -3,13 +3,18 @@
 NOTE: requires ARTIQ >= 5, for the
 :func:`artiq.coredevice.rtio.rtio_input_timestamped_data` RUST syscall.
 """
+import enum
+
 import numpy as np
 from artiq.coredevice.rtio import rtio_input_data
 from artiq.coredevice.rtio import rtio_input_timestamped_data
 from artiq.coredevice.rtio import rtio_output
 from artiq.language.core import delay_mu
 from artiq.language.core import kernel
+from artiq.language.types import TInt32
+from artiq.language.types import TList
 from dynaconf import settings
+
 
 # TODO: remove these
 class TimingChannels(enum.IntEnum):
@@ -40,6 +45,18 @@ timestamp_422ps = 0b11000 + 4
 
 class Entangler:
     """Sequences remote entanglement experiments between a master and a slave."""
+
+    kernel_invariants = {
+        "core",
+        "channel",
+        "is_master",
+        "ref_period_mu",
+        "_SEQUENCER_TIME_MASK",
+        "_ADDRESS_WRITE",
+        "_NUM_ALLOWED_HERALDS",
+        "_HERALD_LENGTH_MASK",
+        "_PATTERN_WIDTH",
+    }
 
     def __init__(self, dmgr, channel, is_master=True, core_device="core"):
         """Fast sequencer for generating remote entanglement.
@@ -113,17 +130,17 @@ class Entangler:
             data |= 1 << 1
         if standalone:
             data |= 1 << 2
-        self.write(self.ADDRESS_WRITE.CONFIG, data)
+        self.write(self._ADDRESS_WRITE.CONFIG, data)
 
     @kernel
-    def set_timing_mu(self, channel, t_start_mu, t_stop_mu):
+    def set_timing_mu(self, channel: TInt32, t_start_mu: TInt32, t_stop_mu: TInt32):
         """Set the output channel timing and relative gate times.
 
         Times are in machine units.
         For output channels the timing resolution is the coarse clock (8ns), and
         the times are relative to the start of the entanglement cycle.
         For gate channels the time is relative to the reference pulse (422
-        pulse input) and has fine timing resolultion (1ns).
+        pulse input) and has fine timing resolution (1ns).
 
         The start / stop times can be between 0 and the cycle length.
         (i.e for a cycle length of 100*8ns, stop can be at most 100*8ns)
@@ -139,8 +156,8 @@ class Entangler:
         t_stop_mu += 1
 
         # Truncate to settings.FULL_COUNTER_WIDTH.
-        t_start_mu &= self.sequencer_time_mask
-        t_stop_mu &= self.sequencer_time_mask
+        t_start_mu &= self._SEQUENCER_TIME_MASK
+        t_stop_mu &= self._SEQUENCER_TIME_MASK
         self.write(channel, (t_stop_mu << 16) | t_start_mu)
 
     @kernel
@@ -154,14 +171,14 @@ class Entangler:
         self.set_timing_mu(channel, t_start_mu, t_stop_mu)
 
     @kernel
-    def set_cycle_length_mu(self, t_cycle_mu):
+    def set_cycle_length_mu(self, t_cycle_mu: TInt32):
         """Set the entanglement cycle length.
 
         If the herald module does not signal success by this time the loop
         repeats. Resolution is coarse_ref_period.
         """
         t_cycle_mu = t_cycle_mu >> 3
-        self.write(self.ADDRESS_WRITE.TCYCLE, t_cycle_mu)
+        self.write(self._ADDRESS_WRITE.TCYCLE, t_cycle_mu)
 
     @kernel
     def set_cycle_length(self, t_cycle):
@@ -173,7 +190,7 @@ class Entangler:
         self.set_cycle_length_mu(t_cycle_mu)
 
     @kernel
-    def set_heralds(self, heralds):
+    def set_heralds(self, heralds: TList[TInt32]):
         """Set the count patterns that cause the entangler loop to exit.
 
         Up to 4 patterns can be set.
@@ -184,11 +201,11 @@ class Entangler:
         To herald on both: set_heralds(0b0001, 0b1010).
         """
         data = 0
-        assert len(heralds) <= 4
+        assert len(heralds) <= self._NUM_ALLOWED_HERALDS
         for i in range(len(heralds)):
-            data |= (heralds[i] & 0xF) << (4 * i)
-            data |= 1 << (16 + i)
-        self.write(self.ADDRESS_WRITE.HERALD, data)
+            data |= (heralds[i] & self._HERALD_LENGTH_MASK) << (self._PATTERN_WIDTH * i)
+            data |= 1 << (self._NUM_ALLOWED_HERALDS * self._PATTERN_WIDTH + i)
+        self.write(self._ADDRESS_WRITE.HERALD, data)
 
     @kernel
     def run_mu(self, duration_mu):
@@ -200,14 +217,14 @@ class Entangler:
             duration_mu (int): Timeout duration of this entanglement cycle, in mu.
 
         Returns:
-            tuple of [timestamp, reason].
+            tuple of (timestamp, reason).
             timestamp is the RTIO time at the end of the final cycle.
             reason is 0x3fff if there was a timeout, or a bitfield giving the
             herald matches if there was a success.
 
         """
         duration_mu = duration_mu >> 3
-        self.write(self.ADDRESS_WRITE.RUN, duration_mu)
+        self.write(self._ADDRESS_WRITE.RUN, duration_mu)
         # Following func is only in ARTIQ >= 5, don't have in dev environment
         # pylint: disable=no-name-in-module
         return rtio_input_timestamped_data(np.int64(-1), self.channel)
