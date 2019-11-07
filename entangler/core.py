@@ -70,7 +70,7 @@ class ChannelSequencer(Module):
         ]
 
 
-class InputGater(Module):
+class TriggeredInputGater(Module):
     """Event gater that connects to ttl_serdes_generic phys.
 
     The gate is defined as a time window after a reference event occurs.
@@ -368,7 +368,8 @@ class EntanglerCore(Module):
         self.submodules.sequencers = [ChannelSequencer(self.msm.m) for _ in range(4)]
 
         self.submodules.apd_gaters = [
-            InputGater(self.msm.m, phy_422pulse, phy_apd) for phy_apd in phy_apds
+            TriggeredInputGater(self.msm.m, phy_422pulse, phy_apd)
+            for phy_apd in phy_apds
         ]
 
         self.submodules.heralder = PatternMatcher(num_inputs=4, num_patterns=4)

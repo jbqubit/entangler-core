@@ -1,4 +1,4 @@
-"""Test the :class:`entangler.core.InputGater` properly register input events."""
+"""Test the :class:`entangler.core.TriggeredInputGater` registers input events."""
 import os
 import sys
 
@@ -11,15 +11,15 @@ from migen import Module  # noqa: E402
 from migen import Signal  # noqa: E402
 from migen import run_simulation  # noqa: E402
 
-from entangler.core import InputGater  # noqa: E402
-from gateware_utils import MockPhy  # noqa: E402 ./helpers/gateware_utils
+from entangler.core import TriggeredInputGater  # noqa: E402
+from gateware_utils import MockPhy  # noqa: E402 pylint: disable=import-error
 
 
-class GaterHarness(Module):
-    """Test harness to wrap & pass signals to an ``InputGater``."""
+class TriggeredGaterHarness(Module):
+    """Test harness to wrap & pass signals to a ``TriggeredInputGater``."""
 
     def __init__(self):
-        """Create a test harness for the :class:`InputGater`."""
+        """Create a test harness for the :class:`TriggeredInputGater`."""
         self.m = Signal(14)
         self.rst = Signal()
         self.sync += [self.m.eq(self.m + 1), If(self.rst, self.m.eq(0))]
@@ -27,13 +27,13 @@ class GaterHarness(Module):
         self.submodules.phy_ref = MockPhy(self.m)
         self.submodules.phy_sig = MockPhy(self.m)
 
-        core = InputGater(self.m, self.phy_ref, self.phy_sig)
+        core = TriggeredInputGater(self.m, self.phy_ref, self.phy_sig)
         self.submodules.core = core
         self.comb += core.clear.eq(self.rst)
 
 
 def gater_test(dut, gate_start=None, gate_stop=None, t_ref=None, t_sig=None):
-    """Test an ``InputGater`` correctly registers inputs."""
+    """Test a ``TriggeredInputGater`` correctly registers inputs."""
     yield dut.core.gate_start.eq(gate_start)
     yield dut.core.gate_stop.eq(gate_stop)
     yield dut.phy_ref.t_event.eq(t_ref)
@@ -60,29 +60,29 @@ def gater_test(dut, gate_start=None, gate_stop=None, t_ref=None, t_sig=None):
 
 
 if __name__ == "__main__":
-    dut = GaterHarness()
+    dut = TriggeredGaterHarness()
     run_simulation(dut, gater_test(dut, 20, 30, 20, 41), vcd_name="gater.vcd")
 
     gate_start = 8
     gate_stop = 25
     t_ref = 20
 
-    dut = GaterHarness()
+    dut = TriggeredGaterHarness()
     run_simulation(
         dut, gater_test(dut, gate_start, gate_stop, t_ref, t_ref + gate_start - 1)
     )
 
-    dut = GaterHarness()
+    dut = TriggeredGaterHarness()
     run_simulation(
         dut, gater_test(dut, gate_start, gate_stop, t_ref, t_ref + gate_start)
     )
 
-    dut = GaterHarness()
+    dut = TriggeredGaterHarness()
     run_simulation(
         dut, gater_test(dut, gate_start, gate_stop, t_ref, t_ref + gate_stop)
     )
 
-    dut = GaterHarness()
+    dut = TriggeredGaterHarness()
     run_simulation(
         dut, gater_test(dut, gate_start, gate_stop, t_ref, t_ref + gate_stop + 1)
     )
