@@ -75,7 +75,8 @@ class ChannelSequencer(Module):
 class TriggeredInputGater(Module):
     """Event gater that connects to ttl_serdes_generic phys.
 
-    The gate is defined as a time window after a reference event occurs.
+    The gate is defined as a time window after a reference event occurs
+    (i.e. window = (t_ref + gate_start, t_ref + gate_stop)).
     The reference time is that of a rising edge on ``phy_ref``. There is no protection
     against multiple edges on ``phy_ref``.
     The gate start and stop are specified as offsets in mu (=1 ns mostly) from this
