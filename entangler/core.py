@@ -151,6 +151,67 @@ class TriggeredInputGater(Module):
         ]
 
 
+class UntriggeredInputGater(Module):
+    """Event gater that connects to ttl_serdes_generic phys.
+
+    The gate is defined as a time window of a counter.
+    The gate start and stop are specified as absolute values of the counter,
+    in MU (=1 ns mostly).
+
+    The module is triggered if it sees a signal edge (from ``phy_sig``) in the
+    gate window.
+    Once the module is triggered, then subsequent signal edges are ignored.
+    Clear has to be asserted to clear the triggered flag.
+
+    The start gate offset must be at least 8 * mu.
+    """
+
+    def __init__(self, m, phy_sig):
+        """Define the gateware to gate & latch inputs."""
+        self.clear = Signal()
+
+        self.triggered = Signal()
+
+        n_fine = len(phy_sig.fine_ts)
+
+        full_timestamp_width = settings.COARSE_COUNTER_WIDTH + n_fine
+        # TODO: move assertion to where it actually matters, i.e. at PHY level
+        assert full_timestamp_width == settings.FULL_COUNTER_WIDTH
+
+        self.sig_ts = Signal(full_timestamp_width)
+
+        # In mu
+        self.gate_start = Signal(full_timestamp_width)
+        self.gate_stop = Signal(full_timestamp_width)
+
+        # # #
+
+        self.sync += [
+            # reset on clear
+            If(self.clear, self.triggered.eq(0), self.sig_ts.eq(0))
+        ]
+
+        past_window_start = Signal()
+        before_window_end = Signal()
+        triggering = Signal()
+        t_sig = Signal(full_timestamp_width)
+        self.comb += [
+            t_sig.eq(Cat(phy_sig.fine_ts, m)),
+            past_window_start.eq(t_sig >= self.gate_start),
+            before_window_end.eq(t_sig <= self.gate_stop),
+            triggering.eq(past_window_start & before_window_end),
+        ]
+
+        self.sync += [
+            # register input event
+            If(
+                phy_sig.stb_rising & ~self.triggered & triggering,
+                self.triggered.eq(triggering),
+                self.sig_ts.eq(t_sig),
+            )
+        ]
+
+
 class PatternMatcher(Module):
     """Checks if input vector matches any pattern in patterns.
 
