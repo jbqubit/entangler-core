@@ -173,6 +173,7 @@ class UntriggeredInputGater(Module):
         """Define the gateware to gate & latch inputs."""
         self.clear = Signal()
 
+        self.is_window_valid = Signal()  # output
         self.triggered = Signal()
 
         n_fine = len(phy_sig.fine_ts)
@@ -196,12 +197,11 @@ class UntriggeredInputGater(Module):
 
         past_window_start = Signal()
         before_window_end = Signal()
-        valid_window = Signal()
         triggering = Signal()
         t_sig = Signal(full_timestamp_width)
         self.comb += [
             t_sig.eq(Cat(phy_sig.fine_ts, m)),
-            valid_window.eq(
+            self.is_window_valid.eq(
                 (self.gate_start >= 8)
                 & (self.gate_stop >= 8)
                 & (self.gate_start < self.gate_stop)
@@ -209,7 +209,10 @@ class UntriggeredInputGater(Module):
             past_window_start.eq(t_sig >= self.gate_start),
             before_window_end.eq(t_sig <= self.gate_stop),
             triggering.eq(
-                past_window_start & before_window_end & ~self.clear & valid_window
+                past_window_start
+                & before_window_end
+                & ~self.clear
+                & self.is_window_valid
             ),
         ]
 

@@ -1,4 +1,6 @@
 """Test the :class:`entangler.core.UntriggeredInputGater` registers input events."""
+import itertools
+import logging
 import os
 import sys
 
@@ -16,6 +18,7 @@ from entangler.core import UntriggeredInputGater  # noqa: E402
 from gateware_utils import MockPhy  # noqa: E402 pylint: disable=import-error
 
 #  ./helpers/gateware_utils
+_LOGGER = logging.getLogger(__name__)
 
 
 class UntriggeredGaterHarness(Module):
@@ -39,6 +42,12 @@ def gater_test(
     dut: UntriggeredGaterHarness, gate_start: int, gate_stop: int, t_sig: int
 ):
     """Test a ``UntriggeredInputGater`` correctly registers inputs."""
+    _LOGGER.info(
+        "Starting basic gater test: time_(start, stop, signal) = %d, %d, %d",
+        gate_start,
+        gate_stop,
+        t_sig,
+    )
     # setup input signals
     yield dut.gater.gate_start.eq(gate_start)
     yield dut.gater.gate_stop.eq(gate_stop)
@@ -95,6 +104,38 @@ def gater_test(
     assert not triggered
 
 
+def gater_invalid_window_test(dut: UntriggeredGaterHarness):
+    """Test that gater does not trigger when window is invalid."""
+    _LOGGER.info("Starting Invalid window test")
+
+    def set_window_and_test(window_start: int, window_stop: int):
+        yield dut.phy_sig.t_event.eq(0)
+        yield dut.gater.gate_start.eq(window_start)
+        yield dut.gater.gate_stop.eq(window_stop)
+        yield dut.reset.eq(1)
+        yield dut.gater.clear.eq(1)
+
+        yield
+
+        yield dut.reset.eq(0)
+        yield dut.gater.clear.eq(0)
+
+        window_should_be_invalid = (
+            window_start < 8 or window_stop < 8 or window_start >= window_stop
+        )
+        for _ in range(20):
+            yield
+
+            sig_triggered = (yield dut.gater.triggered) == 1
+            # inverted logic
+            sig_window_invalid = (yield dut.gater.is_window_valid) == 0
+            assert not sig_triggered
+            assert sig_window_invalid == window_should_be_invalid
+
+    for i, j in itertools.product(range(15), range(15)):
+        yield from set_window_and_test(i, j)
+
+
 def gater_clear_test(dut: UntriggeredGaterHarness):
     """Test the clear signal, and also that it will not accidentally trigger.
 
@@ -102,6 +143,7 @@ def gater_clear_test(dut: UntriggeredGaterHarness):
     b/c the input PHY would be set to trigger at 0, which matches the default values
     of the gate window, which causes a "fake" trigger. Fixed in this commit.
     """
+    _LOGGER.info("Starting UntriggeredGater Clear Test")
     yield dut.gater.clear.eq(1)
 
     # advance clock cycles
@@ -111,6 +153,7 @@ def gater_clear_test(dut: UntriggeredGaterHarness):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     dut = UntriggeredGaterHarness()
     run_simulation(
         dut,
@@ -128,6 +171,12 @@ if __name__ == "__main__":
             gater_test(dut, gate_start, gate_stop, t_sig),
             vcd_name="untrig_gater_sig-{}.vcd".format(t_sig),
         )
+
+    # Test window validity functionality
+    dut = UntriggeredGaterHarness()
+    run_simulation(
+        dut, gater_invalid_window_test(dut), vcd_name="untrig_gater_window.vcd"
+    )
 
     # Test Clear functionality
     dut = UntriggeredGaterHarness()
