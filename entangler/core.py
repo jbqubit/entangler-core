@@ -139,7 +139,7 @@ class TriggeredInputGater(Module):
             t_sig.eq(Cat(phy_sig.fine_ts, m)),
             past_window_start.eq(t_sig >= abs_gate_start),
             before_window_end.eq(t_sig <= abs_gate_stop),
-            triggering.eq(past_window_start & before_window_end),
+            triggering.eq(past_window_start & before_window_end & ~self.clear),
         ]
 
         self.sync += [
@@ -162,6 +162,9 @@ class UntriggeredInputGater(Module):
     gate window.
     Once the module is triggered, then subsequent signal edges are ignored.
     Clear has to be asserted to clear the triggered flag.
+
+    NOTE: if both ``gate_start, gate_stop < 8``, or if ``gate_start >= gate_stop``,
+    this module will not trigger.
 
     The start gate offset must be at least 8 * mu.
     """
@@ -188,18 +191,26 @@ class UntriggeredInputGater(Module):
 
         self.sync += [
             # reset on clear
-            If(self.clear, self.triggered.eq(0), self.sig_ts.eq(0))
+            If(self.clear, self.triggered.eq(0))
         ]
 
         past_window_start = Signal()
         before_window_end = Signal()
+        valid_window = Signal()
         triggering = Signal()
         t_sig = Signal(full_timestamp_width)
         self.comb += [
             t_sig.eq(Cat(phy_sig.fine_ts, m)),
+            valid_window.eq(
+                (self.gate_start >= 8)
+                & (self.gate_stop >= 8)
+                & (self.gate_start < self.gate_stop)
+            ),
             past_window_start.eq(t_sig >= self.gate_start),
             before_window_end.eq(t_sig <= self.gate_stop),
-            triggering.eq(past_window_start & before_window_end),
+            triggering.eq(
+                past_window_start & before_window_end & ~self.clear & valid_window
+            ),
         ]
 
         self.sync += [

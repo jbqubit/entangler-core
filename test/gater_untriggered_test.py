@@ -57,6 +57,7 @@ def gater_test(
     assert (yield dut.m) == 0
     assert (yield dut.gater.gate_start) == gate_start
     assert (yield dut.gater.gate_stop) == gate_stop
+    assert (yield dut.gater.clear) == 0
 
     end_time = max((gate_start, gate_stop, t_sig))
 
@@ -68,6 +69,7 @@ def gater_test(
         triggered = (yield dut.gater.triggered) == 1
         sig_ts = (yield dut.gater.sig_ts)
         current_time = (yield dut.m) * 8
+        clear_signal = (yield dut.gater.clear) == 1
 
         signal_in_window = gate_start <= t_sig <= gate_stop
         signal_occurred = current_time > t_sig
@@ -76,7 +78,9 @@ def gater_test(
 
         # should trigger if the signal is in the window & the signal time has passed,
         # or if it ever triggered in the past (without clear)
-        should_trigger = (signal_in_window and signal_occurred) or has_ever_triggered
+        should_trigger = (
+            (signal_in_window and signal_occurred) or has_ever_triggered
+        ) and not clear_signal
         assert triggered == should_trigger
         if triggered:
             has_ever_triggered = True
@@ -88,9 +92,22 @@ def gater_test(
     yield dut.gater.clear.eq(0)
     yield
     triggered = (yield dut.gater.triggered) == 1
-    timestamp = (yield dut.gater.sig_ts)
     assert not triggered
-    assert timestamp == 0
+
+
+def gater_clear_test(dut: UntriggeredGaterHarness):
+    """Test the clear signal, and also that it will not accidentally trigger.
+
+    I observed behavior where it would trigger when ``time == 0`` (when uninit)
+    b/c the input PHY would be set to trigger at 0, which matches the default values
+    of the gate window, which causes a "fake" trigger. Fixed in this commit.
+    """
+    yield dut.gater.clear.eq(1)
+
+    # advance clock cycles
+    for _ in range(10):
+        yield
+        assert (yield dut.gater.triggered) == 0
 
 
 if __name__ == "__main__":
@@ -111,3 +128,7 @@ if __name__ == "__main__":
             gater_test(dut, gate_start, gate_stop, t_sig),
             vcd_name="untrig_gater_sig-{}.vcd".format(t_sig),
         )
+
+    # Test Clear functionality
+    dut = UntriggeredGaterHarness()
+    run_simulation(dut, gater_clear_test(dut), vcd_name="untrig_gater_clear.vcd")
