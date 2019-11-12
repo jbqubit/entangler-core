@@ -1,4 +1,6 @@
 """Gateware-side ARTIQ RTIO interface to the entangler core."""
+import math
+
 from artiq.gateware.rtio import rtlink
 from dynaconf import settings
 from migen import Case
@@ -9,7 +11,6 @@ from migen import Module
 from migen import Mux
 from migen import Signal
 
-from .config_conversions import max_value_to_bit_width
 from entangler.core import EntanglerCore
 
 
@@ -36,6 +37,11 @@ class Entangler(Module):
         """
         # width of fine & coarse timestamp/timer
         FULL_COUNTER_WIDTH = settings.FULL_COUNTER_WIDTH
+
+        def max_value_to_bit_width(max_value: int) -> int:
+            """Calculate how many bits are needed to represent an unsigned int."""
+            return math.ceil(math.log2(max_value))
+
         # should eval to 14, but might change.
         PHY_DATA_INPUT_WIDTH = max(
             (

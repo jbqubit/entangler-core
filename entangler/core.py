@@ -16,8 +16,6 @@ from migen import NextState
 from migen import NextValue
 from migen import Signal
 
-from .config_conversions import max_value_to_bit_width
-
 # The 422ps laser system is shared, so for ease of use we OR the slave's RTIO TTL output
 # with the master's signal as long as the entangler core isn't active. The timing will
 # be different from entangler-driven use, but this is only for auxiliary calibration
@@ -317,9 +315,7 @@ class MainStateMachine(Module):
         self.time_remaining = Signal(32)  # Clock cycles remaining before timeout
         self.time_remaining_buf = Signal(32)
         # How many iterations of the loop have completed since last start
-        self.cycles_completed = Signal(
-            max_value_to_bit_width(settings.MAX_CYCLES_PER_RUN)
-        )
+        self.cycles_completed = Signal(max=settings.MAX_CYCLES_PER_RUN)
 
         self.run_stb = Signal()  # Pulsed to start core running until timeout or success
         self.done_stb = (
@@ -495,6 +491,11 @@ class EntanglerCore(Module):
         assert len(input_phys) == settings.NUM_INPUT_SIGNALS + 1
         # TODO: more input length assertions
         # TODO: fix docs to refer to settings parameter
+
+        # 422ps trigger event counter. We use got_ref from the first gater for
+        # convenience (any other channel would work just as well).
+        self.triggers_received = Signal(max=settings.MAX_TRIGGER_COUNTS)
+
         # # #
 
         phy_apds = input_phys[0 : settings.NUM_INPUT_SIGNALS]  # noqa: E203
@@ -621,12 +622,6 @@ class EntanglerCore(Module):
         ]
 
         self.comb += self.msm.herald.eq(self.heralder.is_match)
-
-        # 422ps trigger event counter. We use got_ref from the first gater for
-        # convenience (any other channel would work just as well).
-        self.triggers_received = Signal(
-            max_value_to_bit_width(settings.MAX_TRIGGER_COUNTS)
-        )
         self.sync += [
             If(self.msm.run_stb, self.triggers_received.eq(0)).Else(
                 If(
