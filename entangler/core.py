@@ -481,28 +481,27 @@ class EntanglerCore(Module):
 
         Args:
             core_link_pads (typing.Sequence[platform.Pins]): A list of 5 FPGA pins
-                used to link a master & slave ``Entangler`` device.
+                (Oxford) or 4 pins (UMD) used to link a master & slave
+                ``Entangler`` device.
             output_pads (typing.Sequence[platform.Pins]): The output pins that will
                 be driven by the state machines to output the entanglement generation
-                signals.
+                signals. Number is determined by ``settings.NUM_OUTPUT_CHANNELS``
             passthrough_sigs (typing.Sequence[Signal]): The signals that should be
                 passed through to the ``output_pads`` when the ``Entangler`` is not
-                running.
+                running. Should be the same length as ``output_pads``.
             input_phys (typing.Sequence["PHY"]): TTLInput physical gateware modules
-                that register an input TTL event. Expects a list of 4 input
-                APD/TTL signals.
+                that register an input TTL event. Expects a list of
+                ``settings.NUM_INPUT_SIGNALS`` input APD/TTL signals.
             reference_phy (PHY): Reference input that provides the gating trigger
                 for the other inputs. In Oxford's experiment, this is a signal
-                from a 422nm pulsed laser.
+                from a 422nm (ps?) pulsed laser.
             simulate (bool, optional): If this should be instantiated in
                 simulation mode. If it is simulated, it disables several options like
                 the passthrough_sigs. Defaults to False.
         """
         self.enable = Signal()
 
-        # number of input APDs + 1 for the 422 pulse reference trigger
         # TODO: more input length assertions
-        # TODO: fix docs to refer to settings parameter
 
         # 422ps trigger event counter. We use got_ref from the first gater for
         # convenience (any other channel would work just as well).
