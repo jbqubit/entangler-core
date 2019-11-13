@@ -117,8 +117,7 @@ def test_basic(dut):
 def test_timeout(dut):
     """Test that :mod:`entangler` timeout works.
 
-    Sweeps the timeout is swept to occur at all possible points in the
-    state machine operation.
+    Sweeps the timeout to occur at all possible points in the state machine operation.
     """
     # Declare internal helper functions.
     def out(addr, data):

@@ -5,7 +5,7 @@ from migen import run_simulation
 from entangler.core import MainStateMachine
 
 
-def msm_master_test(dut):
+def msm_master_test(dut: MainStateMachine):
     """Test the main state machine in master configuration."""
     yield dut.m_end.eq(10)
     yield dut.is_master.eq(1)
@@ -17,7 +17,7 @@ def msm_master_test(dut):
         yield
 
 
-def msm_slave_test(dut):
+def msm_slave_test(dut: MainStateMachine):
     """Test the state machine in slave configuration."""
     yield dut.m_end.eq(10)
     yield dut.is_master.eq(1)
@@ -85,14 +85,14 @@ def msm_standalone_test(dut):
     yield from run(False)
 
 
-def msm_pair_test(dut):
+def msm_pair_test(dut: MsmPair):
     """Test the master/slave state machines working together."""
     yield dut.master.m_end.eq(10)
     yield dut.slave.m_end.eq(10)
     yield dut.master.cycle_timeout_length_input.eq(100)
     yield dut.slave.cycle_timeout_length_input.eq(100)
 
-    def run(t_start_master=10, t_start_slave=20, t_herald=None):
+    def run(t_start_master: int, t_start_slave: int, t_herald: int = None):
         yield dut.master.herald.eq(0)
         for _ in range(5):
             yield
