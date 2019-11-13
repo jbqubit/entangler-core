@@ -607,9 +607,13 @@ class EntanglerCore(Module):
                 ~self.msm.is_master & ~self.msm.standalone,
             )
 
-            ts_buf(
-                core_link_pads[4], local_422ps_out, slave_422ps_raw, ~self.msm.is_master
-            )
+            if use_reference_pulse:
+                ts_buf(
+                    core_link_pads[4],
+                    local_422ps_out,
+                    slave_422ps_raw,
+                    ~self.msm.is_master,
+                )
 
             # Master -> slave:
             ts_buf(
