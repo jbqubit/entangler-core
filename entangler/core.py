@@ -263,8 +263,8 @@ class MainStateMachine(Module):
         m (:class:`Signal`(counter_width)): Global counter, provides current
             position in cycle.
         time_remaining (:class:`Signal`(32)): Clock cycles remaining until
-            the state machine times out. Output, only valid while running
-        time_remaining_buf (:class:`Signal`(32)): Input, sets the time until
+            the state machine times out. OUTPUT ONLY, only valid while running
+        cycle_timeout_length_input (:class:`Signal`(32)): INPUT, sets the time until
             ``timeout`` for the next run of the state machine.
         cycles_completed (:class:`Signal`(~14 bits)): number of entanglement
             cycles/loops completed since most recent start. Exact width is
@@ -313,7 +313,7 @@ class MainStateMachine(Module):
         """Define the state machine logic for running the input & output sequences."""
         self.m = Signal(counter_width)  # Global cycle-relative time.
         self.time_remaining = Signal(32)  # Clock cycles remaining before timeout
-        self.time_remaining_buf = Signal(32)
+        self.cycle_timeout_length_input = Signal(32)
         # How many iterations of the loop have completed since last start
         self.cycles_completed = Signal(max=settings.MAX_CYCLES_PER_RUN)
 
@@ -384,9 +384,9 @@ class MainStateMachine(Module):
         )
 
         self.sync += [
-            If(self.run_stb, self.time_remaining.eq(self.time_remaining_buf)).Else(
-                If(~self.timeout, self.time_remaining.eq(self.time_remaining - 1))
-            )
+            If(
+                self.run_stb, self.time_remaining.eq(self.cycle_timeout_length_input)
+            ).Else(If(~self.timeout, self.time_remaining.eq(self.time_remaining - 1)))
         ]
 
         done = Signal()
