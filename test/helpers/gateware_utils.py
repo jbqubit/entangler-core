@@ -4,6 +4,12 @@ from migen import Module
 from migen import Signal
 
 
+def advance_clock(num_cycles: int) -> None:
+    """Advance the simulation clock by some number of cycles."""
+    for _ in range(num_cycles):
+        yield
+
+
 def rtio_output_event(rtlink, addr, data):
     """Simulate a RTIO output event happening on the RTIO bus."""
     yield rtlink.o.address.eq(addr)
