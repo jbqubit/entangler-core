@@ -1,5 +1,52 @@
 # Entangler Gateware Notes
 
+## Pin Configuration Notes
+
+### Master Entangler -> Slave Entangler Communication
+
+5 pins (Oxford) or 4 pins (UMD) are used for Master <-> Slave entangler communication. These must be connected
+to correctly synchronize the two devices/gateware modules.
+
+To do this:
+    1. Build two gateware modules. Provide appropriate TTL/GPIO pins to communicate
+        between the two modules.
+    2. Configure the two gateware modules using appropriate driver calls.
+        NOTE: the is_master flag is set on driver instantiation, so you can change
+        this between ARTIQ experiments but probably not within the same experiment.
+        An example sequence:
+        ```python
+        # In device_db.py:
+        {
+            "entangler_device_master": {
+                "type": "local",
+                "module": "entangler.driver",
+                "class": "Entangler",
+                "arguments": {
+                    "channel": ENTANGLER_RTIO_CHANNEL,
+                    "is_master": True,  # CHANGE THIS for slave
+                },
+            },
+        }
+        ```
+        ```python
+        @host_only
+        def build():
+            self.setattr_device("entangler_device_master")
+
+        @kernel
+        def prep_entangler()
+            self.entangler_device_master.set_config(enable=False, standalone=False)
+        ```
+
+The synchronization pins are used as follows (in order they must be input into the Gateware builder):
+    1. Ready: if ready to start the next entanglement cycle (Slave -> Master)
+    2. (Master -> Slave): Trigger output
+    3. (Master -> Slave): Entanglement success output
+    4. (Master -> Slave): Entanglement cycle has timed out
+    5. (OXFORD ONLY): (Slave -> Master): Sharing of the 422 laser pulse (disabled in Ion-Photon version of Entangler)
+
+NOTE: these definitions can be found in [core.EntanglerCore](./core).
+
 ## Timestamp Configuration
 
 Input timestamp resolution is 1ns
