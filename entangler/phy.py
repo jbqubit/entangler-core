@@ -22,18 +22,34 @@ class Entangler(Module):
     """
 
     def __init__(
-        self, core_link_pads, output_pads, passthrough_sigs, input_phys, simulate=False
+        self,
+        core_link_pads,
+        output_pads,
+        passthrough_sigs,
+        input_phys,
+        reference_phy: "PHY" = None,
+        simulate: bool = False,
     ):
         """
         Define the interface between an ARTIQ RTIO bus and low-level gateware.
 
         Args:
-            core_link_pads: EEM pads for inter-Kasli link
-            output_pads: pads for 4 output signals (422sigma, 1092, 422 ps trigger, aux)
-            passthrough_sigs: signals from output phys, connected to output_pads when
-                core not running
-            input_phys: serializer-deserializer phys for 5 inputs –
-                APD0-3 and 422ps trigger in
+            core_link_pads: EEM pads for inter-Kasli link (see ``README.md`` in
+                this folder for more info)
+            output_pads: pads for 4 output signals
+                (Oxford: 422sigma, 1092, 422 ps trigger, aux)
+            passthrough_sigs (Sequence[PHY]): signals from output PHYs, connected to
+                output_pads when core not running
+            input_phys: serializer-deserializer PHYs for 4 inputs: APD0-3
+            reference_phy (PHY): a reference trigger signaling that this is a valid
+                cycle and triggering the start of the input windows.
+                In Oxford's experiment, this is a 422ps pulsed laser. This is an
+                optional parameter, this module works perfectly fine without a
+                reference trigger.
+            simulate (bool): Whether this module is being simulated. Simulation disables
+                some checks (for input sizes) that are run on instantiation.
+                This is mostly passed through to lower levels, where the behavior
+                actually does change in simulation/non-simulation modes.
         """
         # width of fine & coarse timestamp/timer
         FULL_COUNTER_WIDTH = settings.FULL_COUNTER_WIDTH
@@ -56,7 +72,7 @@ class Entangler(Module):
             rtlink.IInterface(data_width=PHY_DATA_INPUT_WIDTH, timestamped=True),
         )
 
-        assert len(input_phys) == settings.NUM_INPUT_CHANNELS + 1
+        assert len(input_phys) == settings.NUM_INPUT_SIGNALS
         if not simulate:
             assert len(core_link_pads) == 5
             assert len(output_pads) == settings.NUM_OUTPUT_CHANNELS
@@ -70,6 +86,7 @@ class Entangler(Module):
                 output_pads,
                 passthrough_sigs,
                 input_phys,
+                reference_phy=reference_phy,
                 simulate=simulate,
             )
         )

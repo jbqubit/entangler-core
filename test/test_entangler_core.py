@@ -26,19 +26,18 @@ class StandaloneHarness(Module):
         self.submodules.phy_apd2 = MockPhy(self.counter)
         self.submodules.phy_apd3 = MockPhy(self.counter)
         self.submodules.phy_ref = MockPhy(self.counter)
-        input_phys = [
-            self.phy_apd0,
-            self.phy_apd1,
-            self.phy_apd2,
-            self.phy_apd3,
-            self.phy_ref,
-        ]
+        input_phys = [self.phy_apd0, self.phy_apd1, self.phy_apd2, self.phy_apd3]
 
         core_link_pads = None
         output_pads = None
         passthrough_sigs = None
         self.submodules.core = EntanglerCore(
-            core_link_pads, output_pads, passthrough_sigs, input_phys, simulate=True
+            core_link_pads,
+            output_pads,
+            passthrough_sigs,
+            input_phys,
+            reference_phy=self.phy_ref,
+            simulate=True,
         )
 
         self.comb += self.counter.eq(self.core.msm.m)
@@ -76,6 +75,9 @@ def standalone_test(dut):
 
     for _ in range(5):
         yield
+
+    assert (yield dut.core.uses_reference_trigger) == 1
+    
     yield dut.core.msm.run_stb.eq(1)
     yield
     yield dut.core.msm.run_stb.eq(0)

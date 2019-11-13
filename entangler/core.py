@@ -464,6 +464,7 @@ class EntanglerCore(Module):
         output_pads: typing.Sequence[platform.Pins],
         passthrough_sigs: typing.Sequence[Signal],
         input_phys: typing.Sequence["PHY"],
+        reference_phy: "PHY" = None,
         simulate: bool = False,
     ):
         """Define the submodules & connections between them to form an ``Entangler``.
@@ -478,9 +479,11 @@ class EntanglerCore(Module):
                 passed through to the ``output_pads`` when the ``Entangler`` is not
                 running.
             input_phys (typing.Sequence["PHY"]): TTLInput physical gateware modules
-                that register an input TTL event. Expects a list of 4, with
-                the first 4 being the input APD/TTL signals, and the last one
-                as a sync signal with the entanglement laser.
+                that register an input TTL event. Expects a list of 4 input
+                APD/TTL signals.
+            reference_phy (PHY): Reference input that provides the gating trigger
+                for the other inputs. In Oxford's experiment, this is a signal
+                from a 422nm pulsed laser.
             simulate (bool, optional): If this should be instantiated in
                 simulation mode. If it is simulated, it disables several options like
                 the passthrough_sigs. Defaults to False.
@@ -488,18 +491,19 @@ class EntanglerCore(Module):
         self.enable = Signal()
 
         # number of input APDs + 1 for the 422 pulse reference trigger
-        assert len(input_phys) == settings.NUM_INPUT_SIGNALS + 1
         # TODO: more input length assertions
         # TODO: fix docs to refer to settings parameter
 
         # 422ps trigger event counter. We use got_ref from the first gater for
         # convenience (any other channel would work just as well).
+        # Unused if
+        self.uses_reference_trigger = Signal()
         self.triggers_received = Signal(max=settings.MAX_TRIGGER_COUNTS)
 
         # # #
 
-        phy_apds = input_phys[0 : settings.NUM_INPUT_SIGNALS]  # noqa: E203
-        phy_422pulse = input_phys[settings.NUM_INPUT_SIGNALS]
+        assert len(input_phys) == settings.NUM_INPUT_SIGNALS  # noqa: E203
+        use_reference_pulse = reference_phy is not None
 
         self.submodules.msm = MainStateMachine()
 
@@ -507,10 +511,18 @@ class EntanglerCore(Module):
             ChannelSequencer(self.msm.m) for _ in range(settings.NUM_OUTPUT_CHANNELS)
         ]
 
-        self.submodules.apd_gaters = [
-            TriggeredInputGater(self.msm.m, phy_422pulse, phy_apd)
-            for phy_apd in phy_apds
-        ]
+        if use_reference_pulse:
+            # phy_422pulse = reference_phy
+            gaters = [
+                TriggeredInputGater(self.msm.m, reference_phy, phy_apd)
+                for phy_apd in input_phys
+            ]
+        else:
+            # phy_422pulse = self.msm.cycle_starting
+            gaters = [
+                UntriggeredInputGater(self.msm.m, phy_apd) for phy_apd in input_phys
+            ]
+        self.submodules.apd_gaters = gaters
 
         self.submodules.heralder = PatternMatcher(
             num_inputs=settings.NUM_INPUT_SIGNALS,
@@ -620,13 +632,18 @@ class EntanglerCore(Module):
         self.comb += [
             sequencer.clear.eq(self.msm.cycle_starting) for sequencer in self.sequencers
         ]
+        self.comb += [
+            self.msm.herald.eq(self.heralder.is_match),
+            self.uses_reference_trigger.eq(int(use_reference_pulse)),
+        ]
 
-        self.comb += self.msm.herald.eq(self.heralder.is_match)
         self.sync += [
             If(self.msm.run_stb, self.triggers_received.eq(0)).Else(
                 If(
-                    # TODO: convert to parametrized??
-                    self.msm.cycle_ending & self.apd_gaters[0].got_ref,
+                    self.msm.cycle_ending
+                    & (
+                        self.apd_gaters[0].got_ref if use_reference_pulse else int(True)
+                    ),
                     self.triggers_received.eq(self.triggers_received + 1),
                 )
             )
