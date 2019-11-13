@@ -456,6 +456,16 @@ class EntanglerCore(Module):
 
     This top-level block incorporates all the other subcomponents in this file,
     and is the primary one that should be used by end-users.
+
+    Attributes:
+        enable (Signal): INPUT, starts the entanglement generation/checking sequence.
+        uses_reference_trigger (Signal): OUTPUT, whether this entangler is using
+            a reference signal for its trigger. This is static, defined at compile time.
+        triggers_received (Signal(max=settings.MAX_TRIGGER_COUNTS)): OUTPUT,
+            number of triggers received in one run of the Entangler.
+            This is only valid if ``uses_reference_trigger`` is set to 1.
+            Otherwise, it will only ever be ``0``.
+
     """
 
     def __init__(
