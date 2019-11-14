@@ -51,7 +51,7 @@ def msm_standalone_test(dut):
     yield dut.m_end.eq(10)
     yield dut.is_master.eq(1)
     yield dut.standalone.eq(1)
-    yield dut.cycle_timeout_length_input.eq(80)
+    yield dut.timeout_input.eq(80)
 
     yield
     yield
@@ -89,8 +89,8 @@ def msm_pair_test(dut: MsmPair):
     """Test the master/slave state machines working together."""
     yield dut.master.m_end.eq(10)
     yield dut.slave.m_end.eq(10)
-    yield dut.master.cycle_timeout_length_input.eq(100)
-    yield dut.slave.cycle_timeout_length_input.eq(100)
+    yield dut.master.timeout_input.eq(100)
+    yield dut.slave.timeout_input.eq(100)
 
     def run(t_start_master: int, t_start_slave: int, t_herald: int = None):
         yield dut.master.herald.eq(0)

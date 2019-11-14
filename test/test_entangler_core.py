@@ -75,7 +75,7 @@ def standalone_test(dut):
     yield dut.core.msm.m_end.eq(20)
     yield dut.core.msm.is_master.eq(1)
     yield dut.core.msm.standalone.eq(1)
-    yield dut.core.msm.cycle_timeout_length_input.eq(1000)
+    yield dut.core.msm.timeout_input.eq(1000)
 
     yield from set_sequencer_outputs([(1, 9), (2, 5), (3, 4)])
 

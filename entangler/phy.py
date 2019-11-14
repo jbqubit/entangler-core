@@ -111,7 +111,7 @@ class Entangler(Module):
 
         # Write timeout counter and start core running
         self.comb += [
-            self.core.msm.cycle_timeout_length_input.eq(self.rtlink.o.data),
+            self.core.msm.timeout_input.eq(self.rtlink.o.data),
             self.core.msm.run_stb.eq((self.rtlink.o.address == 1) & self.rtlink.o.stb),
         ]
 
