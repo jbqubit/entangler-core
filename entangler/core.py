@@ -259,6 +259,9 @@ class PatternMatcher(Module):
 class MainStateMachine(Module):
     """State machine to run the entanglement generation process.
 
+    Runs continuously in "cycles" until ``timeout`` or until entanglement occurs
+    (determined by an input signal ``herald``).
+
     Attributes:
         m (:class:`Signal`(counter_width)): Global counter, provides current
             position in cycle.
@@ -269,19 +272,23 @@ class MainStateMachine(Module):
             the entanglement cycles (i.e. outputting signals then monitoring).
         cycles_completed (:class:`Signal`(~14 bits)): number of entanglement
             cycles/loops completed since most recent start. Exact width is
-            derived from settings.MAX_CYCLES_PER_RUN
+            derived from ``settings.MAX_CYCLES_PER_RUN``.
         run_stb (:class:`Signal`(1)): Input signal/strobe, pulse high to start
             the state machine/entanglement generation loops.
         done_stb (:class:`Signal`(1)): Output signal, pulses high to signal
-            completion (either timeout or success)
+            completion (either timeout or success).
         running (:class:`Signal`(1)): High the whole time that the state
-            machine is running
+            machine is running.
         timeout (:class:`Signal`(1)): Output signal, set if the state machine
             times out.
         success (:class:`Signal`(1)): Asserted when the state machine achieves
             success/pattern match/entanglement.
-        ready (:class:`Signal`(1)): ??
-        herald (:class:`Signal`): ??
+        ready (:class:`Signal`(1)): OUTPUT, effectively whether the state
+            machine can continue running. Asserted when run_stb is pulsed, and
+            cleared on success or timeout.
+        herald (:class:`Signal`): INPUT, whether entanglement has been heralded.
+            If true, then the state machine declares success and stops running
+            (after the end of the cycle).
         is_master (:class:`Signal`): Input signal, sets this instance of the
             state machine as a master, i.e. the main state machine
             driver/controller.
@@ -290,11 +297,11 @@ class MainStateMachine(Module):
         act_as_master (:class:`Signal`): OUTPUT, If the state machine is acting in
             master configuration.
         trigger_out (:class:`Signal`): Trigger signal from master state machine
-            to slave
+            to slave.
         trigger_in_raw (:class:`Signal`): raw trigger input from the master ->
-            slave state machine
+            slave state machine.
         success_in_raw (:class:`Signal`): raw success input from the master state
-            machine (used when slave)
+            machine (used when slave).
         timeout_in_raw (:class:`Signal`): raw signal input (as slave) from master
             when the state machine sequence has timed out (too many cycles
             without success).
@@ -304,9 +311,9 @@ class MainStateMachine(Module):
             number of clock cycles that each entanglement loop should run for
             (units of coarse clock, should be 8 ns).
         cycle_starting (:class:`Signal`): asserted when an entanglement cycle
-            (loop of the state machine) is starting
+            (loop of the state machine) is starting.
         cycle_ending (:class:`Signal`): asserted when an entanglement cycle
-            (loop of the state machine) is ending
+            (loop of the state machine) is ending.
 
     """
 
