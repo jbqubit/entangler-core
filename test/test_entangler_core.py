@@ -72,7 +72,7 @@ def standalone_test(dut):
         for i, time in enumerate(event_times):
             yield getattr(dut, "phy_apd{}".format(i)).t_event.eq(time)
 
-    yield dut.core.msm.m_end.eq(20)
+    yield dut.core.msm.cycle_length_input.eq(20)
     yield dut.core.msm.is_master.eq(1)
     yield dut.core.msm.standalone.eq(1)
     yield dut.core.msm.timeout_input.eq(1000)

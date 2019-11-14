@@ -300,9 +300,9 @@ class MainStateMachine(Module):
             without success).
         slave_ready_raw (:class:`Signal`): Signal from slave -> master that the
             slave is ready.
-        m_end (:class:`Signal`(``counter_width``)): The number of clock cycles
-            that each entanglement loop should run for (units of coarse clock,
-            should be 8 ns).
+        cycle_length_input (:class:`Signal`(``counter_width``)): INPUT, the
+            number of clock cycles that each entanglement loop should run for
+            (units of coarse clock, should be 8 ns).
         cycle_starting (:class:`Signal`): asserted when an entanglement cycle
             (loop of the state machine) is starting
         cycle_ending (:class:`Signal`): asserted when an entanglement cycle
@@ -347,7 +347,7 @@ class MainStateMachine(Module):
         # Unregistered input from slave
         self.slave_ready_raw = Signal()
 
-        self.m_end = Signal(
+        self.cycle_length_input = Signal(
             counter_width
         )  # Number of clock cycles to run main loop for
 
@@ -359,7 +359,7 @@ class MainStateMachine(Module):
 
         # # #
 
-        self.comb += self.cycle_ending.eq(self.m == self.m_end)
+        self.comb += self.cycle_ending.eq(self.m == self.cycle_length_input)
 
         self.trigger_in = Signal()
         self.success_in = Signal()

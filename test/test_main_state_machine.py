@@ -7,7 +7,7 @@ from entangler.core import MainStateMachine
 
 def msm_master_test(dut: MainStateMachine):
     """Test the main state machine in master configuration."""
-    yield dut.m_end.eq(10)
+    yield dut.cycle_length_input.eq(10)
     yield dut.is_master.eq(1)
     yield dut.time_remaining.eq(100)
 
@@ -19,7 +19,7 @@ def msm_master_test(dut: MainStateMachine):
 
 def msm_slave_test(dut: MainStateMachine):
     """Test the state machine in slave configuration."""
-    yield dut.m_end.eq(10)
+    yield dut.cycle_length_input.eq(10)
     yield dut.is_master.eq(1)
     yield dut.cycles_remaining.eq(3)
 
@@ -48,7 +48,7 @@ class MsmPair(Module):
 
 def msm_standalone_test(dut):
     """Test the ``Entangler`` state machine logic in standalone mode."""
-    yield dut.m_end.eq(10)
+    yield dut.cycle_length_input.eq(10)
     yield dut.is_master.eq(1)
     yield dut.standalone.eq(1)
     yield dut.timeout_input.eq(80)
@@ -87,8 +87,8 @@ def msm_standalone_test(dut):
 
 def msm_pair_test(dut: MsmPair):
     """Test the master/slave state machines working together."""
-    yield dut.master.m_end.eq(10)
-    yield dut.slave.m_end.eq(10)
+    yield dut.master.cycle_length_input.eq(10)
+    yield dut.slave.cycle_length_input.eq(10)
     yield dut.master.timeout_input.eq(100)
     yield dut.slave.timeout_input.eq(100)
 

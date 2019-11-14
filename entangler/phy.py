@@ -137,7 +137,7 @@ class Entangler(Module):
                 (self.rtlink.o.address == settings.ADDRESS_WRITE.TCYCLE)
                 & self.rtlink.o.stb,
                 # Write cycle length
-                self.core.msm.m_end.eq(self.rtlink.o.data[:10]),
+                self.core.msm.cycle_length_input.eq(self.rtlink.o.data[:10]),
             ),
             If(
                 (self.rtlink.o.address == settings.ADDRESS_WRITE.HERALD)
