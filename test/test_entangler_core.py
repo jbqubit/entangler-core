@@ -93,18 +93,23 @@ class StandaloneHarness(Module):
         """Set the patterns that the ``EntanglerCore`` will try to match."""
         patterns = self.core.heralder.patterns
         enables = self.core.heralder.pattern_ens
-        i = -1
         for i, pattern in enumerate(pattern_list):
             assert pattern < 2 ** len(patterns[i])
             _LOGGER.debug("Setting pattern %i = %x", i, pattern)
             yield self.core.heralder.patterns[i].eq(pattern)
-            yield enables[i].eq(1)
             # yield
             # assert (yield patterns[i]) == pattern
-        for disable_index in range(i + 1, len(patterns)):
-            _LOGGER.debug("Disabling pattern %i", disable_index)
-            yield patterns[i].eq(0)
-            yield enables[i].eq(0)
+        # set enables. Convert # of patters -> one-hot encoding
+        yield enables.eq(2 ** len(pattern_list) - 1)
+
+        # Verify enable setting
+        # yield
+        # _LOGGER.debug(
+        #     "Enables val: %i, should be %i",
+        #     (yield enables),
+        #     ((2 ** len(pattern_list) - 1)),
+        # )
+        # assert (yield enables) == (2 ** len(pattern_list) - 1)
 
 
 def standalone_test(dut: StandaloneHarness):
@@ -113,10 +118,10 @@ def standalone_test(dut: StandaloneHarness):
 
     yield from dut.set_sequencer_outputs([(1, 9), (2, 5), (3, 4)])
 
-    yield from dut.set_gating_times([(18, 30), (18, 30)])
+    yield from dut.set_gating_times([(18, 30), (8, 30), (18, 30)])
 
     yield dut.phy_ref.t_event.eq(75)
-    yield from dut.set_event_times([100] * 4)
+    yield from dut.set_event_times([1000] * 4)  # make events "impossible"
 
     yield from dut.set_patterns((0b0101, 0b1111))
 
@@ -128,11 +133,19 @@ def standalone_test(dut: StandaloneHarness):
     yield
     yield dut.core.msm.run_stb.eq(0)
 
+    yield from advance_clock(500)
+
+    # eventually, make an event happen.
+    ref_event_time = 8 * 10 + 3
+    yield dut.phy_ref.t_event.eq(ref_event_time)
+    yield from dut.set_event_times([ref_event_time + i for i in (18, 40, 30, 30)])
+
     yield from advance_clock(50)
 
-    # ref_event_time = 8*10 +3
-
-    yield from advance_clock(50)
+    # check the EntanglerCore succeeded as expected.
+    assert (yield dut.core.msm.success) == 1
+    assert (yield dut.core.msm.running) == 0
+    assert (yield dut.core.msm.timeout) == 0
 
 
 if __name__ == "__main__":
