@@ -1,4 +1,5 @@
 """Test the :class:`entangler.core.EntanglerCore` functionality."""
+import logging
 import os
 import sys
 import typing
@@ -11,9 +12,12 @@ from migen import Module  # noqa: E402
 from migen import run_simulation  # noqa: E402
 from migen import Signal  # noqa: E402
 
+# pylint: disable=import-error
 from entangler.core import EntanglerCore  # noqa: E402
 from gateware_utils import MockPhy  # noqa: E402 ./helpers/gateware_utils
 from gateware_utils import advance_clock  # noqa: E402
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class StandaloneHarness(Module):
@@ -44,48 +48,77 @@ class StandaloneHarness(Module):
 
         self.comb += self.counter.eq(self.core.msm.m)
 
-
-def standalone_test(dut):
-    """Test the standalone :class:``EntanglerCore`` works properly."""
+    def setup_core(self, cycle_length: int, timeout: int):
+        """Initialize the basic settings for the ``EntanglerCore``."""
+        msm = self.core.msm
+        yield msm.cycle_length_input.eq(cycle_length)
+        yield msm.timeout_input.eq(timeout)
+        yield msm.is_master.eq(1)
+        yield msm.standalone.eq(1)
 
     def set_sequencer_outputs(
-        time_pairs: typing.Sequence[typing.Tuple[int, int]]
+        self, time_pairs: typing.Sequence[typing.Tuple[int, int]]
     ) -> None:
+        """Set output TTL/GPIO timings."""
+        sequencers = self.core.sequencers
+        i = -1
         for i, timing_pair in enumerate(time_pairs):
             start, stop = timing_pair
-            yield dut.core.sequencers[i].m_start.eq(start)
-            yield dut.core.sequencers[i].m_stop.eq(stop)
-        for disable_ind in range(i + 1, len(dut.core.sequencers)):
-            yield dut.core.sequencers[disable_ind].m_start.eq(0)
-            yield dut.core.sequencers[disable_ind].m_start.eq(0)
+            yield sequencers[i].m_start.eq(start)
+            yield sequencers[i].m_stop.eq(stop)
+        for disable_ind in range(i + 1, len(sequencers)):
+            yield sequencers[disable_ind].m_start.eq(0)
+            yield sequencers[disable_ind].m_stop.eq(0)
 
-    def set_gating_times(time_pairs: typing.Sequence[typing.Tuple[int, int]]) -> None:
+    def set_gating_times(
+        self, time_pairs: typing.Sequence[typing.Tuple[int, int]]
+    ) -> None:
+        """Set time windows when the input gaters will register input events."""
+        gaters = self.core.apd_gaters
+        i = -1
         for i, timing_pair in enumerate(time_pairs):
             start, stop = timing_pair
-            yield dut.core.apd_gaters[i].gate_start.eq(start)
-            yield dut.core.apd_gaters[i].gate_stop.eq(stop)
-        for disable_ind in range(i + 1, len(dut.core.apd_gaters)):
-            yield dut.core.sequencers[disable_ind].m_start.eq(0)
-            yield dut.core.sequencers[disable_ind].m_start.eq(0)
+            yield gaters[i].gate_start.eq(start)
+            yield gaters[i].gate_stop.eq(stop)
+        for disable_ind in range(i + 1, len(gaters)):
+            yield gaters[disable_ind].gate_start.eq(0)
+            yield gaters[disable_ind].gate_stop.eq(0)
 
-    def set_event_times(event_times: typing.Sequence[int]) -> None:
+    def set_event_times(self, event_times: typing.Sequence[int]) -> None:
+        """Set the times when the mocked 'input' signals will occur."""
         for i, time in enumerate(event_times):
-            yield getattr(dut, "phy_apd{}".format(i)).t_event.eq(time)
+            yield getattr(self, "phy_apd{}".format(i)).t_event.eq(time)
 
-    yield dut.core.msm.cycle_length_input.eq(20)
-    yield dut.core.msm.is_master.eq(1)
-    yield dut.core.msm.standalone.eq(1)
-    yield dut.core.msm.timeout_input.eq(1000)
+    def set_patterns(self, pattern_list: typing.Sequence[int]):
+        """Set the patterns that the ``EntanglerCore`` will try to match."""
+        patterns = self.core.heralder.patterns
+        enables = self.core.heralder.pattern_ens
+        i = -1
+        for i, pattern in enumerate(pattern_list):
+            assert pattern < 2 ** len(patterns[i])
+            _LOGGER.debug("Setting pattern %i = %x", i, pattern)
+            yield self.core.heralder.patterns[i].eq(pattern)
+            yield enables[i].eq(1)
+            # yield
+            # assert (yield patterns[i]) == pattern
+        for disable_index in range(i + 1, len(patterns)):
+            _LOGGER.debug("Disabling pattern %i", disable_index)
+            yield patterns[i].eq(0)
+            yield enables[i].eq(0)
 
-    yield from set_sequencer_outputs([(1, 9), (2, 5), (3, 4)])
 
-    yield from set_gating_times([(18, 30), (18, 30)])
+def standalone_test(dut: StandaloneHarness):
+    """Test the standalone :class:``EntanglerCore`` works properly."""
+    yield from dut.setup_core(cycle_length=20, timeout=1000)
 
-    yield dut.phy_ref.t_event.eq(1000)
-    yield from set_event_times([1000] * 4)
+    yield from dut.set_sequencer_outputs([(1, 9), (2, 5), (3, 4)])
 
-    yield dut.core.heralder.patterns[0].eq(0b0101)
-    yield dut.core.heralder.pattern_ens[0].eq(1)
+    yield from dut.set_gating_times([(18, 30), (18, 30)])
+
+    yield dut.phy_ref.t_event.eq(75)
+    yield from dut.set_event_times([100] * 4)
+
+    yield from dut.set_patterns((0b0101, 0b1111))
 
     yield from advance_clock(5)
 
@@ -97,14 +130,12 @@ def standalone_test(dut):
 
     yield from advance_clock(50)
 
-    yield dut.phy_ref.t_event.eq(8 * 10 + 3)
-    yield from set_event_times([8 * 10 + 3 + i for i in (18, 30, 30, 30)])
+    # ref_event_time = 8*10 +3
 
     yield from advance_clock(50)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
     dut = StandaloneHarness()
-    run_simulation(
-        dut, standalone_test(dut), vcd_name="core_standalone.vcd", clocks={"sys": 8}
-    )
+    run_simulation(dut, standalone_test(dut), vcd_name="core_standalone.vcd")
