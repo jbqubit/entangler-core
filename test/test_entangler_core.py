@@ -111,6 +111,12 @@ class StandaloneHarness(Module):
         # )
         # assert (yield enables) == (2 ** len(pattern_list) - 1)
 
+    def start_entanglement_generator(self) -> None:
+        """Start the state machine that generates & checks for entanglement."""
+        yield self.core.msm.run_stb.eq(1)
+        yield
+        yield self.core.msm.run_stb.eq(0)
+
 
 def standalone_test(dut: StandaloneHarness):
     """Test the standalone :class:``EntanglerCore`` works properly."""
@@ -129,9 +135,7 @@ def standalone_test(dut: StandaloneHarness):
 
     assert (yield dut.core.uses_reference_trigger) == 1
 
-    yield dut.core.msm.run_stb.eq(1)
-    yield
-    yield dut.core.msm.run_stb.eq(0)
+    yield from dut.start_entanglement_generator()
 
     yield from advance_clock(500)
 
