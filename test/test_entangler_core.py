@@ -185,8 +185,16 @@ def standalone_test_parametrized(dut: StandaloneHarness, cycle_length: int):
     pattern_to_bool = functools.partial(int_to_bool_array, num_binary_digits=4)
     bool_patterns = list(map(pattern_to_bool, patterns))
 
+    gates_did_trigger = []
+
+    def read_gates_triggered() -> None:
+        gates_did_trigger.clear()
+        for gater in dut.core.apd_gaters:
+            # NOTE: doesn't like yield in iterator syntax...
+            gates_did_trigger.append(bool((yield gater.triggered)))
+
     # Sweep the event times through the window, and check that it triggers properly.
-    for i, signal_time in enumerate(range(ref_time, cycle_length_ns + 20)):
+    for signal_time in range(ref_time, cycle_length_ns + 20):
         _LOGGER.info("Testing signal_time (mod cycle_length) = %i", signal_time)
         yield from dut.set_event_times([signal_time] * input_chans)
 
@@ -197,10 +205,7 @@ def standalone_test_parametrized(dut: StandaloneHarness, cycle_length: int):
         yield  # advance to IDLE state, I think
 
         # check the proper output events occurred
-        gates_did_trigger = []
-        for gater in dut.core.apd_gaters:
-            # NOTE: doesn't like yield in iterator syntax...
-            gates_did_trigger.append(bool((yield gater.triggered)))
+        yield from read_gates_triggered()
         gates_should_trigger = [
             t1 <= (signal_time - ref_time) <= t2 for t1, t2 in gate_windows
         ]
@@ -208,15 +213,14 @@ def standalone_test_parametrized(dut: StandaloneHarness, cycle_length: int):
             assert gates_did_trigger == gates_should_trigger
         except AssertionError as err:
             _LOGGER.debug("Time elapsed since ref: %i", signal_time - ref_time)
-            _LOGGER.debug(
+            _LOGGER.debug("Window times (rel to reference): %s", gate_windows)
+            _LOGGER.error(
                 "Triggered: %s, should_trigger: %s",
                 gates_did_trigger,
                 gates_should_trigger,
             )
-            _LOGGER.debug("Window times (rel to reference): %s", gate_windows)
             raise err
 
-        # yield from wait_until(dut.core.msm.cycle_starting, max_cycles=cycle_length_ns)
         entanglement_did_succeed = yield dut.core.msm.success
         triggers_in_pattern_format = list(reversed(gates_did_trigger))
         entanglement_should_succeed = any(
@@ -225,7 +229,7 @@ def standalone_test_parametrized(dut: StandaloneHarness, cycle_length: int):
         try:
             assert entanglement_did_succeed == entanglement_should_succeed
         except AssertionError as err:
-            _LOGGER.debug(
+            _LOGGER.error(
                 "Expected, measured entanglement: %s, %s",
                 entanglement_should_succeed,
                 bool(entanglement_did_succeed),
