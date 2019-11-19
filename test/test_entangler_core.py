@@ -96,11 +96,11 @@ class StandaloneHarness(Module):
         for i, pattern in enumerate(pattern_list):
             assert pattern < 2 ** len(patterns[i])
             _LOGGER.debug("Setting pattern %i = %x", i, pattern)
-            yield self.core.heralder.patterns[i].eq(pattern)
+            yield patterns[i].eq(pattern)
             # yield
             # assert (yield patterns[i]) == pattern
-        # set enables. Convert # of patters -> one-hot encoding
-        yield enables.eq(2 ** len(pattern_list) - 1)
+        # set enables. Convert # of patterns -> one-hot encoding
+        yield enables.eq((2 ** len(pattern_list)) - 1)
 
         # Verify enable setting
         # yield
