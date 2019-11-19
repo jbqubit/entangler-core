@@ -162,7 +162,9 @@ def standalone_test(dut: StandaloneHarness):
     assert (yield dut.core.msm.timeout) == 0
 
 
-def standalone_test_parametrized(dut: StandaloneHarness, cycle_length: int):
+def standalone_test_parametrized(
+    dut: StandaloneHarness, cycle_length: int, failed_cycles: int
+):
     """Test that all possible combinations of input signals occur."""
     _LOGGER.info("Starting EntCore param test: cycle_length=%i", cycle_length)
     input_chans = settings.NUM_INPUT_SIGNALS
@@ -196,10 +198,26 @@ def standalone_test_parametrized(dut: StandaloneHarness, cycle_length: int):
     # Sweep the event times through the window, and check that it triggers properly.
     for signal_time in range(ref_time, cycle_length_ns + 20):
         _LOGGER.info("Testing signal_time (mod cycle_length) = %i", signal_time)
-        yield from dut.set_event_times([signal_time] * input_chans)
 
-        # start the entanglement if not already running. Ignored if pre-running
+        # run a few dummy cycles where no signal occurs
+        yield from dut.set_event_times([cycle_length_ns + 10] * input_chans)
         yield from dut.start_entanglement_generator()
+        for cyc in range(failed_cycles):
+            yield from wait_until(dut.core.msm.cycle_ending, max_cycles=cycle_length_ns)
+            yield from read_gates_triggered()
+            yield
+            try:
+                assert not any(gates_did_trigger)
+            except AssertionError as err:
+                _LOGGER.error("Gates triggered (none should): %s", gates_did_trigger)
+                raise err
+            assert not bool((yield dut.core.msm.success))
+            cyc_completed = yield dut.core.msm.cycles_completed
+            # _LOGGER.debug("Cycles completed: %i", cyc_completed)
+            assert cyc_completed == cyc + 1
+
+        # now, allow entanglement to happen
+        yield from dut.set_event_times([signal_time] * input_chans)
 
         yield from wait_until(dut.core.msm.cycle_ending, max_cycles=cycle_length_ns)
         yield  # advance to IDLE state, I think
@@ -235,7 +253,7 @@ def standalone_test_parametrized(dut: StandaloneHarness, cycle_length: int):
                 bool(entanglement_did_succeed),
             )
             raise err
-        assert 1 == (yield dut.core.msm.cycles_completed)
+        assert (yield dut.core.msm.cycles_completed) == failed_cycles + 1
 
 
 if __name__ == "__main__":
@@ -246,13 +264,13 @@ if __name__ == "__main__":
     dut = StandaloneHarness()
     run_simulation(
         dut,
-        standalone_test_parametrized(dut, cycle_length=20),
+        standalone_test_parametrized(dut, cycle_length=20, failed_cycles=3),
         vcd_name="core_standalone_param_1.vcd",
     )
 
     dut = StandaloneHarness()
     run_simulation(
         dut,
-        standalone_test_parametrized(dut, cycle_length=50),
+        standalone_test_parametrized(dut, cycle_length=50, failed_cycles=3),
         vcd_name="core_standalone_param_2.vcd",
     )
