@@ -1,4 +1,5 @@
 """Test the :class:`entangler.core.EntanglerCore` functionality."""
+import functools
 import logging
 import os
 import sys
@@ -8,6 +9,7 @@ import typing
 sys.path.append(os.path.join(os.path.dirname(__file__), "helpers"))
 
 
+from dynaconf import settings  # noqa: E402
 from migen import Module  # noqa: E402
 from migen import run_simulation  # noqa: E402
 from migen import Signal  # noqa: E402
@@ -16,8 +18,16 @@ from migen import Signal  # noqa: E402
 from entangler.core import EntanglerCore  # noqa: E402
 from gateware_utils import MockPhy  # noqa: E402 ./helpers/gateware_utils
 from gateware_utils import advance_clock  # noqa: E402
+from gateware_utils import wait_until  # noqa: E402
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def int_to_bool_array(val: int, num_binary_digits: int) -> typing.Sequence[bool]:
+    """Convert a one-hot-encoded (binary) number to the equivalent boolean array."""
+    bool_arr = [bool(val & 1 << (i - 1)) for i in range(num_binary_digits, 0, -1)]
+    assert len(bool_arr) == num_binary_digits
+    return bool_arr
 
 
 class StandaloneHarness(Module):
@@ -152,7 +162,93 @@ def standalone_test(dut: StandaloneHarness):
     assert (yield dut.core.msm.timeout) == 0
 
 
+def standalone_test_parametrized(dut: StandaloneHarness, cycle_length: int):
+    """Test that all possible combinations of input signals occur."""
+    _LOGGER.info("Starting EntCore param test: cycle_length=%i", cycle_length)
+    input_chans = settings.NUM_INPUT_SIGNALS
+    output_chans = settings.NUM_OUTPUT_CHANNELS
+    yield from dut.setup_core(cycle_length, 10000)
+    yield from dut.set_sequencer_outputs([(i, 10 - i) for i in range(output_chans)])
+
+    # setup input checking (patterns & gating)
+    ref_time = int(cycle_length / 4 * 8)
+    cycle_length_ns = int(cycle_length * 8)
+    yield dut.phy_ref.t_event.eq(ref_time)
+    # delay window by 1 coarse clock cycle (8ns) b/c it doesn't work in same clock as
+    # reference
+    gate_windows = [
+        (ref_time + (i + 1) * 8, cycle_length_ns - ref_time) for i in range(input_chans)
+    ]
+    yield from dut.set_gating_times(gate_windows)
+    patterns = (0b0011,)
+    yield from dut.set_patterns(patterns)
+    pattern_to_bool = functools.partial(int_to_bool_array, num_binary_digits=4)
+    bool_patterns = list(map(pattern_to_bool, patterns))
+
+    # Sweep the event times through the window, and check that it triggers properly.
+    for i, signal_time in enumerate(range(ref_time, cycle_length_ns + 20)):
+        _LOGGER.info("Testing signal_time (mod cycle_length) = %i", signal_time)
+        yield from dut.set_event_times([signal_time] * input_chans)
+
+        # start the entanglement if not already running. Ignored if pre-running
+        yield from dut.start_entanglement_generator()
+
+        yield from wait_until(dut.core.msm.cycle_ending, max_cycles=cycle_length_ns)
+        yield  # advance to IDLE state, I think
+
+        # check the proper output events occurred
+        gates_did_trigger = []
+        for gater in dut.core.apd_gaters:
+            # NOTE: doesn't like yield in iterator syntax...
+            gates_did_trigger.append(bool((yield gater.triggered)))
+        gates_should_trigger = [
+            t1 <= (signal_time - ref_time) <= t2 for t1, t2 in gate_windows
+        ]
+        try:
+            assert gates_did_trigger == gates_should_trigger
+        except AssertionError as err:
+            _LOGGER.debug("Time elapsed since ref: %i", signal_time - ref_time)
+            _LOGGER.debug(
+                "Triggered: %s, should_trigger: %s",
+                gates_did_trigger,
+                gates_should_trigger,
+            )
+            _LOGGER.debug("Window times (rel to reference): %s", gate_windows)
+            raise err
+
+        # yield from wait_until(dut.core.msm.cycle_starting, max_cycles=cycle_length_ns)
+        entanglement_did_succeed = yield dut.core.msm.success
+        triggers_in_pattern_format = list(reversed(gates_did_trigger))
+        entanglement_should_succeed = any(
+            triggers_in_pattern_format == pat for pat in bool_patterns
+        )
+        try:
+            assert entanglement_did_succeed == entanglement_should_succeed
+        except AssertionError as err:
+            _LOGGER.debug(
+                "Expected, measured entanglement: %s, %s",
+                entanglement_should_succeed,
+                bool(entanglement_did_succeed),
+            )
+            raise err
+        assert 1 == (yield dut.core.msm.cycles_completed)
+
+
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.WARNING)
     dut = StandaloneHarness()
     run_simulation(dut, standalone_test(dut), vcd_name="core_standalone.vcd")
+
+    dut = StandaloneHarness()
+    run_simulation(
+        dut,
+        standalone_test_parametrized(dut, cycle_length=20),
+        vcd_name="core_standalone_param_1.vcd",
+    )
+
+    dut = StandaloneHarness()
+    run_simulation(
+        dut,
+        standalone_test_parametrized(dut, cycle_length=50),
+        vcd_name="core_standalone_param_2.vcd",
+    )
