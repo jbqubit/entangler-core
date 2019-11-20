@@ -4,7 +4,6 @@ import math
 import os
 import random
 import sys
-import typing
 
 import migen
 from dynaconf import settings
@@ -15,6 +14,7 @@ import entangler.core  # noqa: E402
 sys.path.append(os.path.join(os.path.dirname(__file__), "helpers"))
 
 # pylint: disable=import-error
+from coretester import CoreTestHarness  # noqa: E402
 from gateware_utils import MockPhy  # noqa: E402
 from gateware_utils import wait_until   # noqa: E402
 # fmt: on
@@ -23,7 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 COARSE_CLOCK_PERIOD_NS = 8
 
 
-class StandaloneHarness(migen.Module):
+class StandaloneHarness(CoreTestHarness):
     """Test harness for the ``EntanglerCore``."""
 
     def __init__(self):
@@ -50,80 +50,6 @@ class StandaloneHarness(migen.Module):
 
         self.comb += self.counter.eq(self.core.msm.m)
 
-    def setup_core(self, cycle_length: int, timeout: int):
-        """Initialize the basic settings for the ``EntanglerCore``."""
-        msm = self.core.msm
-        _LOGGER.debug(
-            "Setting up Entangler: CycTime (coarse) = %i, timeout (coarse) = %i",
-            cycle_length,
-            timeout,
-        )
-        yield msm.cycle_length_input.eq(cycle_length)
-        yield msm.timeout_input.eq(timeout)
-        yield msm.is_master.eq(1)
-        yield msm.standalone.eq(1)
-
-    def set_sequencer_outputs(
-        self, time_pairs: typing.Sequence[typing.Tuple[int, int]]
-    ) -> None:
-        """Set output TTL/GPIO timings."""
-        sequencers = self.core.sequencers
-        i = -1
-        for i, timing_pair in enumerate(time_pairs):
-            start, stop = timing_pair
-            yield sequencers[i].m_start.eq(start)
-            yield sequencers[i].m_stop.eq(stop)
-        for disable_ind in range(i + 1, len(sequencers)):
-            yield sequencers[disable_ind].m_start.eq(0)
-            yield sequencers[disable_ind].m_stop.eq(0)
-
-    def set_gating_times(
-        self, time_pairs: typing.Sequence[typing.Tuple[int, int]]
-    ) -> None:
-        """Set time windows when the input gaters will register input events."""
-        gaters = self.core.apd_gaters
-        i = -1
-        for i, timing_pair in enumerate(time_pairs):
-            start, stop = timing_pair
-            yield gaters[i].gate_start.eq(start)
-            yield gaters[i].gate_stop.eq(stop)
-        for disable_ind in range(i + 1, len(gaters)):
-            yield gaters[disable_ind].gate_start.eq(0)
-            yield gaters[disable_ind].gate_stop.eq(0)
-
-    def set_event_times(self, event_times: typing.Sequence[int]) -> None:
-        """Set the times when the mocked 'input' signals will occur."""
-        for i, time in enumerate(event_times):
-            yield getattr(self, "phy_apd{}".format(i)).t_event.eq(time)
-
-    def set_patterns(self, pattern_list: typing.Sequence[int]):
-        """Set the patterns that the ``EntanglerCore`` will try to match."""
-        patterns = self.core.heralder.patterns
-        enables = self.core.heralder.pattern_ens
-        for i, pattern in enumerate(pattern_list):
-            assert pattern < 2 ** len(patterns[i])
-            _LOGGER.debug("Setting pattern %i = %x", i, pattern)
-            yield patterns[i].eq(pattern)
-            # yield
-            # assert (yield patterns[i]) == pattern
-        # set enables. Convert # of patterns -> one-hot encoding
-        yield enables.eq((2 ** len(pattern_list)) - 1)
-
-        # Verify enable setting
-        # yield
-        # _LOGGER.debug(
-        #     "Enables val: %i, should be %i",
-        #     (yield enables),
-        #     ((2 ** len(pattern_list) - 1)),
-        # )
-        # assert (yield enables) == (2 ** len(pattern_list) - 1)
-
-    def start_entanglement_generator(self) -> None:
-        """Start the state machine that generates & checks for entanglement."""
-        yield self.core.msm.run_stb.eq(1)
-        yield
-        yield self.core.msm.run_stb.eq(0)
-
 
 def ion_photon_test_function(dut: StandaloneHarness) -> None:
     """Test basic IonPhoton experiment.
@@ -131,6 +57,7 @@ def ion_photon_test_function(dut: StandaloneHarness) -> None:
     Not parametrized or fancy, just runs several unsuccessful experiments and
     eventually succeeds at entangling.
     """
+    _LOGGER.info("Starting basic IonPhoton EntanglerCore functional test")
     # *** SETUP ***
     num_inputs = settings.NUM_INPUT_SIGNALS
     num_outputs = settings.NUM_OUTPUT_CHANNELS
@@ -190,7 +117,7 @@ def ion_photon_test_function(dut: StandaloneHarness) -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     dut = StandaloneHarness()
     migen.run_simulation(
         dut,
