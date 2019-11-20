@@ -132,7 +132,7 @@ def test_timeout(dut):
         timedout = False
         for i in range(timeout + n_cycles + 50):
             if (yield dut.core.rtlink.i.stb):
-                data = (yield dut.core.rtlink.i.data)
+                data = yield dut.core.rtlink.i.data
                 if data == 0x3FFF:
                     # This should be the first and only timeout
                     assert not timedout
@@ -149,10 +149,16 @@ def test_timeout(dut):
 if __name__ == "__main__":
     dut = PhyHarness()
     run_simulation(
-        dut, test_basic(dut), vcd_name="phy.vcd", clocks={"sys": 8, "rio": 8}
+        dut,
+        test_basic(dut),
+        vcd_name="phy.vcd",
+        clocks={"sys": 8, "rio": 8, "rio_phy": 8},
     )
 
     dut = PhyHarness()
     run_simulation(
-        dut, test_timeout(dut), vcd_name="phy_timeout.vcd", clocks={"sys": 8, "rio": 8}
+        dut,
+        test_timeout(dut),
+        vcd_name="phy_timeout.vcd",
+        clocks={"sys": 8, "rio": 8, "rio_phy": 8},
     )
