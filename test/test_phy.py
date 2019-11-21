@@ -15,6 +15,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "helpers"))
 # ./helpers/gateware_utils
 from gateware_utils import MockPhy  # noqa: E402 pylint: disable=import-error
 from gateware_utils import rtio_output_event  # noqa: E402 pylint: disable=import-error
+from gateware_utils import advance_clock  # noqa: E402 pylint: disable=import-error
 from entangler.phy import Entangler  # noqa: E402
 
 
@@ -46,22 +47,11 @@ class PhyHarness(Module):
 
         self.comb += self.counter.eq(self.core.core.msm.m)
 
+    def write(self, address: int, data: int) -> None:
+        """Write data to the ``EntanglerPHY`` using the data bus."""
+        yield from rtio_output_event(self.core.rtlink, address, data)
 
-# TODO: CONVERT TO SETTINGS
-ADDR_CONFIG = 0
-ADDR_RUN = 1
-ADDR_NCYCLES = 2
-ADDR_HERALDS = 3
-ADDR_TIMING = 0b1000
-
-
-def test_basic(dut):
-    """Test the entire :mod:`entangler` gateware basic functionality works."""
-    # Helper functions for state machine testing
-    def out(addr, data):
-        yield from rtio_output_event(dut.core.rtlink, addr, data)
-
-    def write_heralds(heralds: typing.Sequence[int] = None):
+    def write_heralds(self, heralds: typing.Sequence[int] = None):
         data = 0
         assert len(heralds) <= settings.NUM_PATTERNS_ALLOWED
         for i, h in enumerate(heralds):
@@ -71,63 +61,71 @@ def test_basic(dut):
             )
             # move herald to appropriate position in register
             data |= h << (settings.NUM_INPUT_SIGNALS * i)
-        yield from out(ADDR_HERALDS, data)
+        yield from self.write(ADDR_HERALDS, data)
+
+
+# TODO: CONVERT TO SETTINGS
+ADDR_CONFIG = 0
+ADDR_RUN = 1
+ADDR_NCYCLES = 2
+ADDR_HERALDS = 3
+ADDR_TIMING = 0b1000
+
+
+def test_basic(dut: PhyHarness):
+    """Test the entire :mod:`entangler` gateware basic functionality works."""
 
     yield dut.phy_ref.t_event.eq(1000)
     yield dut.phy_apd0.t_event.eq(1000)
     yield dut.phy_apd1.t_event.eq(1000)
 
-    for _ in range(5):
-        yield
-    yield from out(ADDR_CONFIG, 0b110)  # disable, standalone
-    yield from write_heralds([0b0101, 0b1010, 0b1100, 0b0101])
+    yield from advance_clock(5)
+    yield from dut.write(ADDR_CONFIG, 0b110)  # disable, standalone
+    yield from dut.write_heralds([0b0101, 0b1010, 0b1100, 0b0101])
     for i in range(settings.NUM_OUTPUT_CHANNELS):
-        # TODO: decode what this is doing
-        yield from out(ADDR_TIMING + i, (2 * i + 2) * (1 << 16) | 2 * i + 1)
+        # set outputs to be on for 1 coarse clock cycle
+        yield from dut.write(ADDR_TIMING + i, (2 * i + 2) * (1 << 16) | 2 * i + 1)
     # for i in [0,2]:
-    #     yield from out(ADDR_TIMING+4+i, (30<<16) | 18)
+    #     yield from dut.write(ADDR_TIMING+4+i, (30<<16) | 18)
     # for i in [1,3]:
-    #     yield from out(ADDR_TIMING+4+i, (1000<<16) | 1000)
-    yield from out(ADDR_NCYCLES, 30)
-    yield from out(ADDR_CONFIG, 0b111)  # Enable standalone
-    yield from out(ADDR_RUN, int(2e3 / 8))
+    #     yield from dut.write(ADDR_TIMING+4+i, (1000<<16) | 1000)
+    yield from dut.write(ADDR_NCYCLES, 30)
+    yield from dut.write(ADDR_CONFIG, 0b111)  # Enable standalone
+    yield from dut.write(ADDR_RUN, int(2e3 / 8))
 
-    for i in range(1000):
-        # if i==200:
-        #     yield dut.phy_ref.t_event.eq( 8*10+3 )
-        #     yield dut.phy_apd0.t_event.eq( 8*10+3 + 18)
-        #     yield dut.phy_apd1.t_event.eq( 8*10+3 + 30)
-        yield
+    yield from advance_clock(1000)
+    # for i in range(1000):
+    #     # if i==200:
+    #     #     yield dut.phy_ref.t_event.eq( 8*10+3 )
+    #     #     yield dut.phy_apd0.t_event.eq( 8*10+3 + 18)
+    #     #     yield dut.phy_apd1.t_event.eq( 8*10+3 + 30)
+    #     yield
 
     # TODO: convert to settings
-    yield from out(0b10000, 0)  # Read status
+    yield from dut.write(0b10000, 0)  # Read status
     yield
-    yield from out(0b10000 + 1, 0)  # Read n_cycles
+    yield from dut.write(0b10000 + 1, 0)  # Read n_cycles
     yield
-    yield from out(0b10000 + 2, 0)  # Read time elapsed
+    yield from dut.write(0b10000 + 2, 0)  # Read time elapsed
     yield
     for i in range(5):
-        yield from out(0b11000 + i, 0)  # Read input timestamps
+        yield from dut.write(0b11000 + i, 0)  # Read input timestamps
         yield
-    for _ in range(5):
-        yield
+    yield from advance_clock(5)
 
 
-def test_timeout(dut):
+def test_timeout(dut: PhyHarness):
     """Test that :mod:`entangler` timeout works.
 
     Sweeps the timeout to occur at all possible points in the state machine operation.
     """
     # Declare internal helper functions.
-    def out(addr, data):
-        yield from rtio_output_event(dut.core.rtlink, addr, data)
-
     def do_timeout(timeout, n_cycles=10):
         yield
-        yield from out(ADDR_CONFIG, 0b110)  # disable, standalone
-        yield from out(ADDR_NCYCLES, n_cycles)
-        yield from out(ADDR_CONFIG, 0b111)  # Enable standalone
-        yield from out(ADDR_RUN, timeout)
+        yield from dut.write(ADDR_CONFIG, 0b110)  # disable, standalone
+        yield from dut.write(ADDR_NCYCLES, n_cycles)
+        yield from dut.write(ADDR_CONFIG, 0b111)  # Enable standalone
+        yield from dut.write(ADDR_RUN, timeout)
 
         timedout = False
         for i in range(timeout + n_cycles + 50):
