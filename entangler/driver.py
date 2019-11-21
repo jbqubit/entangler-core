@@ -190,7 +190,7 @@ class Entangler:
         self.set_cycle_length_mu(t_cycle_mu)
 
     @kernel
-    def set_heralds(self, heralds: TList[TInt32]):
+    def set_heralds(self, heralds: TList(TInt32)):
         """Set the count patterns that cause the entangler loop to exit.
 
         Up to 4 patterns can be set.
