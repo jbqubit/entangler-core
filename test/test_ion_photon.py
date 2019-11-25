@@ -84,7 +84,7 @@ def ion_photon_test_function(dut: StandaloneHarness) -> None:
     yield from dut.set_event_times([cycle_length_ns + 10] * num_inputs)
     # NOTE: patterns are in reverse order vs setting event times
     # (event times are set for APD 1-4, while patterns are (L->R) 4-1)
-    yield from dut.set_patterns((0b0101, 0b1010))
+    yield from dut.set_patterns((0b0101, 0b1010, 0b1100, 0b0011))
 
     # *** START RUNNING ***
     # start the state machine running
