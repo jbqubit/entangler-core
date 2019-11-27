@@ -1,5 +1,6 @@
 """Gateware-side ARTIQ RTIO interface to the entangler core."""
 import math
+import typing
 
 from artiq.gateware.rtio import rtlink
 from dynaconf import settings
@@ -25,9 +26,9 @@ class Entangler(Module):
         self,
         core_link_pads,
         output_pads,
-        passthrough_sigs,
-        input_phys,
-        reference_phy: "PHY" = None,
+        passthrough_sigs: typing.Sequence[Signal],
+        input_phys: typing.Sequence["PHY"],
+        reference_phy=None,
         simulate: bool = False,
     ):
         """
@@ -171,9 +172,11 @@ class Entangler(Module):
         read_timings = Signal()
         read_addr = Signal(3)
 
-        # Input timestamps are [apd0, apd1, apd2, apd3, ref]
+        # Input timestamps are [apd0, apd1, apd2, apd3, (OPTIONAL: reference)]
+        # timestamps will be 0 if they did not trigger
         input_timestamps = [gater.sig_ts for gater in self.core.apd_gaters]
-        input_timestamps.append(self.core.apd_gaters[0].ref_ts)
+        if reference_phy is not None:
+            input_timestamps.append(self.core.apd_gaters[0].ref_ts)
         cases = {}
         timing_data = Signal(FULL_COUNTER_WIDTH)
         for i, ts in enumerate(input_timestamps):
