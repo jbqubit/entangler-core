@@ -1,11 +1,13 @@
+"""Test functions and harness for creating an Entangler PHY device."""
 import logging
 import typing
 
 import migen
 from dynaconf import settings
+from gateware_utils import MockPhy
+from gateware_utils import rtio_output_event
 
 import entangler.phy
-from gateware_utils import MockPhy, rtio_output_event
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -13,15 +15,20 @@ _LOGGER = logging.getLogger(__name__)
 class PhyHarness(migen.Module):
     """PHY Test Harness for :class:`entangler.phy.Entangler`."""
 
-    def __init__(self):
-        """Connect the mocked PHY devices to this device."""
+    def __init__(self, use_ref: bool = True):
+        """Connect the mocked PHY devices to this device.
+
+        Set ``use_ref=False`` if for Ion-Photon.
+        """
+        self.use_ref = use_ref
         self.counter = migen.Signal(32)
 
         self.submodules.phy_apd0 = MockPhy(self.counter)
         self.submodules.phy_apd1 = MockPhy(self.counter)
         self.submodules.phy_apd2 = MockPhy(self.counter)
         self.submodules.phy_apd3 = MockPhy(self.counter)
-        self.submodules.phy_ref = MockPhy(self.counter)
+        if use_ref:
+            self.submodules.phy_ref = MockPhy(self.counter)
         input_phys = [self.phy_apd0, self.phy_apd1, self.phy_apd2, self.phy_apd3]
 
         core_link_pads = None
@@ -32,33 +39,53 @@ class PhyHarness(migen.Module):
             output_pads,
             passthrough_sigs,
             input_phys,
-            reference_phy=self.phy_ref,
+            reference_phy=self.phy_ref if use_ref else None,
             simulate=True,
         )
 
         self.comb += self.counter.eq(self.core.core.msm.m)
 
     def write(self, address: int, data: int) -> None:
-        """Write data to the ``EntanglerPHY`` using the data bus."""
-        device_address = address & ((1 << 8) - 1)
-        channel = (address - device_address) >> 8
+        """Write data to the ``EntanglerPHY`` using the data bus.
+
+        Equivalent of ARTIQ ``rtio_output`` method.
+        """
+        device_address = address & 0xFF
+        channel = address >> 8
         _LOGGER.debug(
             "Writing: (chan, addr, data) = %i, %i, %i", channel, device_address, data
         )
         yield from rtio_output_event(self.core.rtlink, address, data)
 
-    def read(self, channel: int, data_ref: int) -> None:
-        # HACK: sets an input buffer to the value read from the register
-        _LOGGER.debug("Reading from channel %i")
-        data_ref = (yield self.core.rtlink.i.data)
+    def read(self, channel: int, data_ref: list) -> None:
+        """Read data from a PHY device.
 
-    def read_timestamped(self, channel: int, data_ref: int, time_ref: int) -> None:
+        Meant to be patched into an ARTIQ coredevice-level driver over
+        ``rtio_input`` for simulation.
+        """
+        # HACK: sets an input buffer to the value read from the register.
+        # essentially forces pass-by-ref
+        # TODO: untested/might not work
+        _LOGGER.debug("Reading from channel %i")
+        yield self.core.rtlink.o.data.eq(channel)
+        yield
+        data_ref[0] = yield self.core.rtlink.i.data
+
+    def read_timestamped(self, channel: int, data_ref: list, time_ref: list) -> None:
+        """Read data from a PHY device.
+
+        Meant to be patched into an ARTIQ coredevice-level driver over
+        ``rtio_input_timestamped`` for simulation.
+        """
         # HACK: sets an input buffer to the value read from the register
+        # essentially forces pass-by-ref
         # TODO: don't think this works
         yield from self.read(channel, data_ref)
-        time_ref = (yield self.core.rtlink.i.timestamp)
+        time_ref[0] = yield self.core.rtlink.i.timestamp
+        data_ref[0] = yield self.core.rtlink.i.data
 
     def write_heralds(self, heralds: typing.Sequence[int] = None):
+        """Set the heralding patterns for the Entangler via PHY interface."""
         data = 0
         assert len(heralds) <= settings.NUM_PATTERNS_ALLOWED
         for i, h in enumerate(heralds):
@@ -75,9 +102,12 @@ class PhyHarness(migen.Module):
     ) -> None:
         """Set the input signal event times within a cycle, in mu (ns).
 
-        ``event_time_offsets`` set the event times relative to the ref_time.
+        ``event_time_offsets`` set the event times relative to the ``ref_time``.
+        The reference PHY output time is only set if the module is configured
+        to have a Reference (see :meth:`__init__`).
         """
         real_event_times = (ref_time + offset for offset in event_time_offsets)
-        yield self.phy_ref.t_event.eq(ref_time)
+        if self.use_ref:
+            yield self.phy_ref.t_event.eq(ref_time)
         for i, t in enumerate(real_event_times):
             yield getattr(self, "phy_apd{}".format(i)).t_event.eq(t)
