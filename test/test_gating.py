@@ -45,6 +45,7 @@ def gater_test(dut, gate_start: int, gate_stop: int, t_ref: int, t_sig: int):
     yield
     yield dut.rst.eq(1)
     yield
+    assert (yield dut.core.sig_ts) == 0
     yield dut.rst.eq(0)
 
     end_time = max((t_ref + gate_stop), (t_ref + t_sig))

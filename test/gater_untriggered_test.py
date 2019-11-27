@@ -94,14 +94,16 @@ def gater_test(
         if triggered:
             has_ever_triggered = True
             assert sig_ts == t_sig
+        else:
+            assert sig_ts == 0
 
     # Clear the output if there was one, and check timestamp reset.
     yield dut.gater.clear.eq(1)
     yield
     yield dut.gater.clear.eq(0)
     yield
-    triggered = (yield dut.gater.triggered) == 1
-    assert not triggered
+    assert not bool((yield dut.gater.triggered))
+    assert (yield dut.gater.sig_ts) == 0
 
 
 def gater_invalid_window_test(dut: UntriggeredGaterHarness):

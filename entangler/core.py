@@ -126,7 +126,9 @@ class TriggeredInputGater(Module):
                 abs_gate_start.eq(self.gate_start + t_ref),
                 abs_gate_stop.eq(self.gate_stop + t_ref),
             ),
-            If(self.clear, self.got_ref.eq(0), self.triggered.eq(0)),
+            If(
+                self.clear, self.got_ref.eq(0), self.triggered.eq(0), self.sig_ts.eq(0)
+            ),
         ]
 
         past_window_start = Signal()
@@ -190,7 +192,7 @@ class UntriggeredInputGater(Module):
 
         self.sync += [
             # reset on clear
-            If(self.clear, self.triggered.eq(0))
+            If(self.clear, self.triggered.eq(0), self.sig_ts.eq(0))
         ]
 
         past_window_start = Signal()
@@ -392,9 +394,9 @@ class MainStateMachine(Module):
         )
 
         self.sync += [
-            If(
-                self.run_stb, self.time_remaining.eq(self.timeout_input)
-            ).Else(If(~self.timeout, self.time_remaining.eq(self.time_remaining - 1)))
+            If(self.run_stb, self.time_remaining.eq(self.timeout_input)).Else(
+                If(~self.timeout, self.time_remaining.eq(self.time_remaining - 1))
+            )
         ]
 
         done = Signal()
@@ -482,7 +484,7 @@ class EntanglerCore(Module):
         output_pads: typing.Sequence[platform.Pins],
         passthrough_sigs: typing.Sequence[Signal],
         input_phys: typing.Sequence["PHY"],
-        reference_phy: "PHY" = None,
+        reference_phy=None,
         simulate: bool = False,
     ):
         """Define the submodules & connections between them to form an ``Entangler``.
