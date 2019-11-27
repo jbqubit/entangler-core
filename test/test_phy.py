@@ -1,4 +1,5 @@
 """Test the :class:`entangler.phy.Entangler` functionality."""
+import logging
 import os
 import sys
 import typing
@@ -16,52 +17,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "helpers"))
 from gateware_utils import MockPhy  # noqa: E402 pylint: disable=import-error
 from gateware_utils import rtio_output_event  # noqa: E402 pylint: disable=import-error
 from gateware_utils import advance_clock  # noqa: E402 pylint: disable=import-error
+from phytester import PhyHarness    # noqa: E402 pylint: disable=import-error
 from entangler.phy import Entangler  # noqa: E402
-
-
-class PhyHarness(Module):
-    """PHY Test Harness for :class:`entangler.phy.Entangler`."""
-
-    def __init__(self):
-        """Connect the mocked PHY devices to this device."""
-        self.counter = Signal(32)
-
-        self.submodules.phy_apd0 = MockPhy(self.counter)
-        self.submodules.phy_apd1 = MockPhy(self.counter)
-        self.submodules.phy_apd2 = MockPhy(self.counter)
-        self.submodules.phy_apd3 = MockPhy(self.counter)
-        self.submodules.phy_ref = MockPhy(self.counter)
-        input_phys = [self.phy_apd0, self.phy_apd1, self.phy_apd2, self.phy_apd3]
-
-        core_link_pads = None
-        output_pads = None
-        passthrough_sigs = None
-        self.submodules.core = Entangler(
-            core_link_pads,
-            output_pads,
-            passthrough_sigs,
-            input_phys,
-            reference_phy=self.phy_ref,
-            simulate=True,
-        )
-
-        self.comb += self.counter.eq(self.core.core.msm.m)
-
-    def write(self, address: int, data: int) -> None:
-        """Write data to the ``EntanglerPHY`` using the data bus."""
-        yield from rtio_output_event(self.core.rtlink, address, data)
-
-    def write_heralds(self, heralds: typing.Sequence[int] = None):
-        data = 0
-        assert len(heralds) <= settings.NUM_PATTERNS_ALLOWED
-        for i, h in enumerate(heralds):
-            # enable bit
-            data |= (1 << i) << (
-                settings.NUM_INPUT_SIGNALS * settings.NUM_PATTERNS_ALLOWED
-            )
-            # move herald to appropriate position in register
-            data |= h << (settings.NUM_INPUT_SIGNALS * i)
-        yield from self.write(ADDR_HERALDS, data)
 
 
 # TODO: CONVERT TO SETTINGS
@@ -145,6 +102,7 @@ def test_timeout(dut: PhyHarness):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
     dut = PhyHarness()
     run_simulation(
         dut,
