@@ -2,23 +2,17 @@
 import logging
 import os
 import sys
-import typing
 
 from dynaconf import settings
-from migen import Module  # noqa: E402
 from migen import run_simulation  # noqa: E402
-from migen import Signal  # noqa: E402
 
 # add gateware simulation tools "module" (at ./helpers/*)
 sys.path.append(os.path.join(os.path.dirname(__file__), "helpers"))
 
 
 # ./helpers/gateware_utils
-from gateware_utils import MockPhy  # noqa: E402 pylint: disable=import-error
-from gateware_utils import rtio_output_event  # noqa: E402 pylint: disable=import-error
 from gateware_utils import advance_clock  # noqa: E402 pylint: disable=import-error
-from phytester import PhyHarness    # noqa: E402 pylint: disable=import-error
-from entangler.phy import Entangler  # noqa: E402
+from phytester import PhyTestHarness    # noqa: E402 pylint: disable=import-error
 
 
 # TODO: CONVERT TO SETTINGS
@@ -29,9 +23,8 @@ ADDR_HERALDS = 3
 ADDR_TIMING = 0b1000
 
 
-def test_basic(dut: PhyHarness):
+def test_basic(dut: PhyTestHarness):
     """Test the entire :mod:`entangler` gateware basic functionality works."""
-
     yield dut.phy_ref.t_event.eq(1000)
     yield dut.phy_apd0.t_event.eq(1000)
     yield dut.phy_apd1.t_event.eq(1000)
@@ -71,7 +64,7 @@ def test_basic(dut: PhyHarness):
     yield from advance_clock(5)
 
 
-def test_timeout(dut: PhyHarness):
+def test_timeout(dut: PhyTestHarness):
     """Test that :mod:`entangler` timeout works.
 
     Sweeps the timeout to occur at all possible points in the state machine operation.
@@ -103,7 +96,7 @@ def test_timeout(dut: PhyHarness):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
-    dut = PhyHarness()
+    dut = PhyTestHarness()
     run_simulation(
         dut,
         test_basic(dut),
@@ -111,7 +104,7 @@ if __name__ == "__main__":
         clocks={"sys": 8, "rio": 8, "rio_phy": 8},
     )
 
-    dut = PhyHarness()
+    dut = PhyTestHarness()
     run_simulation(
         dut,
         test_timeout(dut),

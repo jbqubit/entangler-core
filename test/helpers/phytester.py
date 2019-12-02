@@ -12,7 +12,7 @@ import entangler.phy
 _LOGGER = logging.getLogger(__name__)
 
 
-class PhyHarness(migen.Module):
+class PhyTestHarness(migen.Module):
     """PHY Test Harness for :class:`entangler.phy.Entangler`."""
 
     def __init__(self, use_ref: bool = True):
