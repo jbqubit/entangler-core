@@ -126,9 +126,7 @@ class TriggeredInputGater(Module):
                 abs_gate_start.eq(self.gate_start + t_ref),
                 abs_gate_stop.eq(self.gate_stop + t_ref),
             ),
-            If(
-                self.clear, self.got_ref.eq(0), self.triggered.eq(0), self.sig_ts.eq(0)
-            ),
+            If(self.clear, self.got_ref.eq(0), self.triggered.eq(0), self.sig_ts.eq(0)),
         ]
 
         past_window_start = Signal()
