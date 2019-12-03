@@ -4,6 +4,7 @@ import math
 import os
 import random
 import sys
+import typing
 
 import migen
 from dynaconf import settings
@@ -118,24 +119,64 @@ def ion_photon_test_function(dut: StandaloneHarness) -> None:
     assert not bool((yield dut.core.msm.timeout))
 
 
-def ion_photon_phy_test(phy: PhyTestHarness):
+def ion_photon_phy_test(
+    phy: PhyTestHarness,
+    pump_stop_time_ns: int = 1000,
+    photon_window_ns: int = 50,
+    num_failed_cycles: int = 9,
+    cycles_until_timeout: int = 50,
+    herald_patterns: typing.Sequence[int] = None,
+    event_times_rel_to_pump_stop: typing.Sequence[int] = None,
+):
     """Test the PHY using the settings Ion-Photon will use.
 
     Performs automatic validation to ensure that the gateware is
     functioning as expected.
+
+    Args:
+        phy (PhyTestHarness): The gateware simulation object to modify.
+        pump_stop_time_ns (int, optional): Time in ns when pumping the experiment
+            should stop (assumes starts pumping at start of cycle, ends at this
+            time). Defaults to 1000.
+        photon_window_ns (int, optional): Window length in ns past the pumping
+            stop time when we should look to observe a photon. Defaults to 50.
+        num_failed_cycles (int, optional): Number of cycles that should pass
+            without any entanglement success. Leave low to speed simulation.
+            Defaults to 9.
+        cycles_until_timeout (int, optional): Approximate number of attempts
+            until the entanglement generation should timeout. Defaults to 50.
+        herald_patterns (typing.Sequence[int], optional): Expected patterns that
+            the entangled photons will generate upon detection. The default is
+            specified in code in this file.
+        event_times_rel_to_pump_stop (typing.Sequence[int], optional): A list of
+            times relative to the pump stop when the photons should arrive.
+            Set to negative to have them effectively not count.
+            Default is a hard-coded set of times that corresponds to success
+            with the default ``herald_patterns[0]``.
+
+    Returns:
+        None
+
+    Yields:
+        Migen gateware simulation.
+
     """
     _LOGGER.info("Starting basic IonPhoton EntanglerPHY functional test")
     core = phy.core.core
     msm = core.msm
     ADDR_TIMING = settings.ADDRESS_WRITE.TIMING
 
+    if herald_patterns is None:
+        herald_patterns = ION_PHOTON_HERALD_PATTERNS
+    if event_times_rel_to_pump_stop is None:
+        event_times_rel_to_pump_stop = (0, photon_window_ns, -10, -30)
+
     yield from phy.write(settings.ADDRESS_WRITE.CONFIG, 0b110)  # disable, standalone
     assert not bool((yield core.enable))
     assert bool((yield msm.act_as_master))
     assert bool((yield msm.standalone))
 
-    cycle_len_ns = 1300
-    pump_stop_time_ns = 1000
+    cycle_len_ns = pump_stop_time_ns + (photon_window_ns * 3)
     pump_stop_time_coarse = math.ceil(pump_stop_time_ns / COARSE_CLOCK_PERIOD_NS)
     pump_timing_coarse = (0, pump_stop_time_coarse)
 
@@ -146,8 +187,7 @@ def ion_photon_phy_test(phy: PhyTestHarness):
         assert (yield seq.m_start) == pump_timing_coarse[0]
         assert (yield seq.m_stop) == pump_timing_coarse[1]
 
-    window_length_ns = 50
-    photon_valid_window = (pump_stop_time_ns, pump_stop_time_ns + window_length_ns)
+    photon_valid_window = (pump_stop_time_ns, pump_stop_time_ns + photon_window_ns)
 
     num_sequencers = settings.NUM_OUTPUT_CHANNELS
     assert num_sequencers == len(core.sequencers)
@@ -175,26 +215,24 @@ def ion_photon_phy_test(phy: PhyTestHarness):
     yield from phy.write(settings.ADDRESS_WRITE.TCYCLE, cycle_len_coarse)
     assert (yield msm.cycle_length_input) == cycle_len_coarse
 
-    runtime = cycle_len_coarse * 50
-    failed_cycles = 9
+    runtime = cycle_len_coarse * cycles_until_timeout
     max_clk_per_cycle = cycle_len_coarse + 5
     yield from phy.write(settings.ADDRESS_WRITE.RUN, runtime)
-    for _ in range(failed_cycles):
+    for _ in range(num_failed_cycles):
         yield from wait_until(msm.cycle_ending, max_cycles=max_clk_per_cycle)
         assert not bool((yield msm.success))
         assert bool((yield msm.cycle_ending))
         yield
 
     # trigger first herald match
-    event_time_offsets = (0, window_length_ns, -10, -30)
-    yield from phy.set_event_times(pump_stop_time_ns, event_time_offsets)
+    yield from phy.set_event_times(pump_stop_time_ns, event_times_rel_to_pump_stop)
 
     yield from wait_until(msm.done_stb, max_cycles=max_clk_per_cycle)
 
     assert bool((yield msm.success))
     # check matched the correct pattern
     assert (yield phy.core.rtlink.i.data) == 0b1000
-    assert (yield msm.cycles_completed) == failed_cycles + 1
+    assert (yield msm.cycles_completed) == num_failed_cycles + 1
 
     # pass lists as buffers to HACK-return values from yield-from func
     cyc_complete = [0]
@@ -213,12 +251,12 @@ def ion_photon_phy_test(phy: PhyTestHarness):
     for i, ts in enumerate(timestamps):
         yield from phy.read(settings.ADDRESS_READ.TIMESTAMP + i, ts)
         _LOGGER.debug("Read timestamp[%i]: %i", i, ts[0])
-        if event_time_offsets[i] >= 0:
-            assert ts[0] == event_time_offsets[i] + pump_stop_time_ns
+        if event_times_rel_to_pump_stop[i] >= 0:
+            assert ts[0] == event_times_rel_to_pump_stop[i] + pump_stop_time_ns
         else:
             assert ts[0] == 0
 
-    assert cyc_complete[0] == failed_cycles + 1
+    assert cyc_complete[0] == num_failed_cycles + 1
     assert status[0] == 0b010  # not ready (i.e. starting), success, not timeout
     assert triggers[0] == 0
     # 4 for extra states in state machine (starting/stopping, etc)
