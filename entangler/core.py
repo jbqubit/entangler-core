@@ -665,7 +665,9 @@ class EntanglerCore(Module):
                 If(
                     self.msm.cycle_ending
                     & (
-                        self.apd_gaters[0].got_ref if use_reference_pulse else int(True)
+                        self.apd_gaters[0].got_ref
+                        if use_reference_pulse
+                        else int(False)
                     ),
                     self.triggers_received.eq(self.triggers_received + 1),
                 )
