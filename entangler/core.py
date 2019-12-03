@@ -403,9 +403,6 @@ class MainStateMachine(Module):
         self.comb += finishing.eq(
             ~self.run_stb & self.running & (self.timeout | self.success)
         )
-        # Done asserted at the at the end of the successful / timedout cycle
-        self.comb += done.eq(finishing & self.cycle_starting)
-        self.comb += self.done_stb.eq(done & ~done_d)
 
         # Ready asserted when run_stb is pulsed, and cleared on success or timeout
         self.sync += [
@@ -424,14 +421,20 @@ class MainStateMachine(Module):
 
         fsm.act(
             "IDLE",
-            self.cycle_starting.eq(1),
             If(
                 self.act_as_master,
                 If(
                     ~finishing & self.ready & (self.slave_ready | self.standalone),
                     NextState("TRIGGER_SLAVE"),
+                    self.cycle_starting.eq(1),
                 ),
-            ).Else(If(~finishing & self.ready & self.trigger_in, NextState("COUNTER"))),
+            ).Else(
+                If(
+                    ~finishing & self.ready & self.trigger_in,
+                    NextState("COUNTER"),
+                    self.cycle_starting.eq(1),
+                )
+            ),
             NextValue(self.m, 0),
             self.trigger_out.eq(0),
         )
@@ -457,6 +460,11 @@ class MainStateMachine(Module):
             If(self.success_in, NextValue(self.success, 1)),
             NextState("IDLE"),
         )
+
+        # Done asserted at the at the end of the successful / timedout cycle
+        in_idle_state = fsm.ongoing("IDLE")
+        self.comb += done.eq(finishing & in_idle_state)
+        self.comb += self.done_stb.eq(done & ~done_d)
 
 
 class EntanglerCore(Module):
