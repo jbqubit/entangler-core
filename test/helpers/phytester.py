@@ -56,33 +56,24 @@ class PhyTestHarness(migen.Module):
             "Writing: (chan, addr, data) = %i, %i, %i", channel, device_address, data
         )
         yield from rtio_output_event(self.core.rtlink, address, data)
+        # wait 1 cycle for data to settle after sync logic
+        # not strictly necessary, but simpler testing
+        yield
 
-    def read(self, channel: int, data_ref: list) -> None:
+    def read(self, address: int, data_ref: list) -> None:
         """Read data from a PHY device.
 
         Meant to be patched into an ARTIQ coredevice-level driver over
-        ``rtio_input`` for simulation.
+        ``rtio_input`` for simulation, or can be called without patch.
         """
         # HACK: sets an input buffer to the value read from the register.
         # essentially forces pass-by-ref
         # TODO: untested/might not work
-        _LOGGER.debug("Reading from channel %i")
-        yield self.core.rtlink.o.data.eq(channel)
+        _LOGGER.debug("Reading from address %i", address)
+        yield from rtio_output_event(self.core.rtlink, address, 0)
         yield
         data_ref[0] = yield self.core.rtlink.i.data
-
-    def read_timestamped(self, channel: int, data_ref: list, time_ref: list) -> None:
-        """Read data from a PHY device.
-
-        Meant to be patched into an ARTIQ coredevice-level driver over
-        ``rtio_input_timestamped`` for simulation.
-        """
-        # HACK: sets an input buffer to the value read from the register
-        # essentially forces pass-by-ref
-        # TODO: don't think this works
-        yield from self.read(channel, data_ref)
-        time_ref[0] = yield self.core.rtlink.i.timestamp
-        data_ref[0] = yield self.core.rtlink.i.data
+        _LOGGER.debug("Read data: %i", data_ref[0])
 
     def write_heralds(self, heralds: typing.Sequence[int] = None):
         """Set the heralding patterns for the Entangler via PHY interface."""
