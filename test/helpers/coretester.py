@@ -1,15 +1,44 @@
 """Shared functions for testing ``EntanglerCore``."""
-import abc
 import logging
 import typing
 
 import migen
+from gateware_utils import MockPhy  # pylint: disable=import-error
+
+import entangler.core
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class CoreTestHarness(migen.Module, abc.ABC):
+class CoreTestHarness(migen.Module):
     """Utility functions for testing ``EntanglerCore`` gateware."""
+
+    def __init__(self, use_reference: bool = False):
+        """Pass through signals to an ``EntanglerCore`` instance.
+
+        Set ``use_reference=True`` for legacy (Oxford)-style
+        Triggered gating (only accepts times relative to input trigger).
+        """
+        self.counter = migen.Signal(32)
+
+        self.submodules.phy_apd0 = MockPhy(self.counter)
+        self.submodules.phy_apd1 = MockPhy(self.counter)
+        self.submodules.phy_apd2 = MockPhy(self.counter)
+        self.submodules.phy_apd3 = MockPhy(self.counter)
+        if use_reference:
+            self.submodules.phy_ref = MockPhy(self.counter)
+        input_phys = [self.phy_apd0, self.phy_apd1, self.phy_apd2, self.phy_apd3]
+
+        self.submodules.core = entangler.core.EntanglerCore(
+            core_link_pads=None,
+            output_pads=None,
+            passthrough_sigs=None,
+            input_phys=input_phys,
+            reference_phy=self.phy_ref if use_reference else None,
+            simulate=True,
+        )
+
+        self.comb += self.counter.eq(self.core.msm.m)
 
     def setup_core(self, cycle_length: int, timeout: int):
         """Initialize the basic settings for the ``EntanglerCore``."""

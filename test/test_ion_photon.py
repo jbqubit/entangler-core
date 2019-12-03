@@ -9,14 +9,11 @@ import typing
 import migen
 from dynaconf import settings
 
-import entangler.core  # noqa: E402
-
 # fmt: off
 sys.path.append(os.path.join(os.path.dirname(__file__), "helpers"))
 
 # pylint: disable=import-error
 from coretester import CoreTestHarness  # noqa: E402
-from gateware_utils import MockPhy  # noqa: E402
 from gateware_utils import wait_until  # noqa: E402
 from phytester import PhyTestHarness    # noqa: E402
 # fmt: on
@@ -26,35 +23,7 @@ COARSE_CLOCK_PERIOD_NS = 8
 ION_PHOTON_HERALD_PATTERNS = (0b0101, 0b1010, 0b1100, 0b0011)
 
 
-class StandaloneHarness(CoreTestHarness):
-    """Test harness for the ``EntanglerCore``."""
-
-    def __init__(self):
-        """Pass through signals to an ``EntanglerCore`` instance."""
-        self.counter = migen.Signal(32)
-
-        self.submodules.phy_apd0 = MockPhy(self.counter)
-        self.submodules.phy_apd1 = MockPhy(self.counter)
-        self.submodules.phy_apd2 = MockPhy(self.counter)
-        self.submodules.phy_apd3 = MockPhy(self.counter)
-        input_phys = [self.phy_apd0, self.phy_apd1, self.phy_apd2, self.phy_apd3]
-
-        core_link_pads = None
-        output_pads = None
-        passthrough_sigs = None
-        self.submodules.core = entangler.core.EntanglerCore(
-            core_link_pads,
-            output_pads,
-            passthrough_sigs,
-            input_phys,
-            reference_phy=None,
-            simulate=True,
-        )
-
-        self.comb += self.counter.eq(self.core.msm.m)
-
-
-def ion_photon_test_function(dut: StandaloneHarness) -> None:
+def ion_photon_core_test(dut: CoreTestHarness) -> None:
     """Test basic IonPhoton experiment.
 
     Not parametrized or fancy, just runs several unsuccessful experiments and
@@ -271,11 +240,11 @@ def ion_photon_phy_test(
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    dut = StandaloneHarness()
+    core_harness = CoreTestHarness(use_reference=False)
     phy_harness = PhyTestHarness(use_ref=False)
     migen.run_simulation(
-        dut,
-        ion_photon_test_function(dut),
+        core_harness,
+        ion_photon_core_test(core_harness),
         vcd_name="ion_photon_core.vcd",
         clocks={"sys": COARSE_CLOCK_PERIOD_NS},
     )

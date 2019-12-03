@@ -11,12 +11,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "helpers"))
 
 from dynaconf import settings  # noqa: E402
 from migen import run_simulation  # noqa: E402
-from migen import Signal  # noqa: E402
 
 # pylint: disable=import-error
-from entangler.core import EntanglerCore  # noqa: E402
 from coretester import CoreTestHarness  # noqa: E402
-from gateware_utils import MockPhy  # noqa: E402 ./helpers/gateware_utils
 from gateware_utils import advance_clock  # noqa: E402
 from gateware_utils import wait_until  # noqa: E402
 
@@ -30,36 +27,7 @@ def int_to_bool_array(val: int, num_binary_digits: int) -> typing.Sequence[bool]
     return bool_arr
 
 
-class StandaloneHarness(CoreTestHarness):
-    """Test harness for the ``EntanglerCore``."""
-
-    def __init__(self):
-        """Pass through signals to an ``EntanglerCore`` instance."""
-        self.counter = Signal(32)
-
-        self.submodules.phy_apd0 = MockPhy(self.counter)
-        self.submodules.phy_apd1 = MockPhy(self.counter)
-        self.submodules.phy_apd2 = MockPhy(self.counter)
-        self.submodules.phy_apd3 = MockPhy(self.counter)
-        self.submodules.phy_ref = MockPhy(self.counter)
-        input_phys = [self.phy_apd0, self.phy_apd1, self.phy_apd2, self.phy_apd3]
-
-        core_link_pads = None
-        output_pads = None
-        passthrough_sigs = None
-        self.submodules.core = EntanglerCore(
-            core_link_pads,
-            output_pads,
-            passthrough_sigs,
-            input_phys,
-            reference_phy=self.phy_ref,
-            simulate=True,
-        )
-
-        self.comb += self.counter.eq(self.core.msm.m)
-
-
-def standalone_test(dut: StandaloneHarness):
+def standalone_test(dut: CoreTestHarness):
     """Test the standalone :class:``EntanglerCore`` works properly."""
     yield from dut.setup_core(cycle_length=20, timeout=1000)
 
@@ -94,7 +62,7 @@ def standalone_test(dut: StandaloneHarness):
 
 
 def standalone_test_parametrized(
-    dut: StandaloneHarness, cycle_length: int, failed_cycles: int
+    dut: CoreTestHarness, cycle_length: int, failed_cycles: int
 ):
     """Test that all possible combinations of input signals occur."""
     _LOGGER.info("Starting EntCore param test: cycle_length=%i", cycle_length)
@@ -189,17 +157,17 @@ def standalone_test_parametrized(
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.WARNING)
-    dut = StandaloneHarness()
+    dut = CoreTestHarness(use_reference=True)
     run_simulation(dut, standalone_test(dut), vcd_name="core_standalone.vcd")
 
-    dut = StandaloneHarness()
+    dut = CoreTestHarness(use_reference=True)
     run_simulation(
         dut,
         standalone_test_parametrized(dut, cycle_length=20, failed_cycles=3),
         vcd_name="core_standalone_param_1.vcd",
     )
 
-    dut = StandaloneHarness()
+    dut = CoreTestHarness(use_reference=True)
     run_simulation(
         dut,
         standalone_test_parametrized(dut, cycle_length=50, failed_cycles=3),
