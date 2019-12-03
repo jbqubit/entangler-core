@@ -32,10 +32,6 @@ class TimingChannels(enum.IntEnum):
 
 
 # Read only
-ADDR_R_STATUS = 0b10000
-ADDR_R_NCYCLES = 0b10000 + 1
-ADDR_R_TIMEREMAINING = 0b10000 + 2
-ADDR_R_NTRIGGERS = 0b10000 + 3
 timestamp_apd0 = 0b11000 + 0
 timestamp_apd1 = 0b11000 + 1
 timestamp_apd2 = 0b11000 + 2
@@ -53,6 +49,7 @@ class Entangler:
         "ref_period_mu",
         "_SEQUENCER_TIME_MASK",
         "_ADDRESS_WRITE",
+        "_ADDRESS_READ",
         "_NUM_ALLOWED_HERALDS",
         "_HERALD_LENGTH_MASK",
         "_PATTERN_WIDTH",
@@ -74,6 +71,7 @@ class Entangler:
         self.ref_period_mu = self.core.seconds_to_mu(self.core.coarse_ref_period)
         self._SEQUENCER_TIME_MASK = (1 << settings.FULL_COUNTER_WIDTH) - 1
         self._ADDRESS_WRITE = settings.ADDRESS_WRITE
+        self._ADDRESS_READ = settings.ADDRESS_READ
         self._NUM_ALLOWED_HERALDS = settings.NUM_PATTERNS_ALLOWED
         self._HERALD_LENGTH_MASK = (1 << settings.NUM_PATTERNS_ALLOWED) - 1
         self._PATTERN_WIDTH = settings.NUM_INPUT_SIGNALS
@@ -242,7 +240,7 @@ class Entangler:
     @kernel
     def get_status(self):
         """Get status of the entangler gateware."""
-        return self.read(ADDR_R_STATUS)
+        return self.read(self._ADDRESS_READ.STATUS)
 
     @kernel
     def get_ncycles(self):
@@ -251,7 +249,7 @@ class Entangler:
         This value is reset every :meth:`run` call, so this is the number since the
         last :meth:`run` call.
         """
-        return self.read(ADDR_R_NCYCLES)
+        return self.read(self._ADDRESS_READ.NCYCLES)
 
     @kernel
     def get_ntriggers(self):
@@ -260,12 +258,12 @@ class Entangler:
         This value is reset every :meth:`run` call, so this is the number since the
         last :meth:`run` call.
         """
-        return self.read(ADDR_R_NTRIGGERS)
+        return self.read(self._ADDRESS_READ.NTRIGGERS)
 
     @kernel
     def get_time_remaining(self):
         """Return the remaining number of clock cycles until the core times out."""
-        return self.read(ADDR_R_TIMEREMAINING)
+        return self.read(self._ADDRESS_READ.TIME_REMAINING)
 
     @kernel
     def get_timestamp_mu(self, channel):
