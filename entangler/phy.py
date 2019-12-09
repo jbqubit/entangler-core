@@ -1,4 +1,5 @@
 """Gateware-side ARTIQ RTIO interface to the entangler core."""
+import logging
 import math
 import typing
 
@@ -13,6 +14,10 @@ from migen import Mux
 from migen import Signal
 
 from entangler.core import EntanglerCore
+
+_LOGGER = logging.getLogger(__name__)
+
+# noqa: E203
 
 
 class Entangler(Module):
@@ -67,16 +72,37 @@ class Entangler(Module):
                 max_value_to_bit_width(settings.MAX_TRIGGER_COUNTS),
             )
         )
+        num_herald_patterns = settings.NUM_PATTERNS_ALLOWED
+        num_inputs = settings.NUM_INPUT_SIGNALS
+        num_outputs = settings.NUM_OUTPUT_CHANNELS
+        timing_bit_width = math.ceil(math.log2(num_inputs + num_outputs))
+        _LOGGER.debug(
+            "PHY Comm (addr) format: [read?, external IO?, addr] = (MSB->LSB): "
+            "[%i,%i,%i:0]",
+            timing_bit_width + 1,
+            timing_bit_width,
+            timing_bit_width - 1,
+        )
+        _LOGGER.debug("Total output address bits: %i", timing_bit_width + 2)
+        if num_inputs != 4 or num_outputs != 4:
+            _LOGGER.warning(
+                "Using non-standard number of I/O to Entangler. "
+                "Make sure that your addresses (in settings.toml) correspond to "
+                "correct # of bits! Format (MSB->LSB): [read?, external I/O, "
+                "len=Log2(I + O)]"
+            )
 
         self.rtlink = rtlink.Interface(
-            rtlink.OInterface(data_width=32, address_width=5, enable_replace=False),
+            rtlink.OInterface(
+                data_width=32, address_width=timing_bit_width + 2, enable_replace=False
+            ),
             rtlink.IInterface(data_width=PHY_DATA_INPUT_WIDTH, timestamped=True),
         )
 
-        assert len(input_phys) == settings.NUM_INPUT_SIGNALS
+        assert len(input_phys) == num_inputs
         if not simulate:
-            assert len(core_link_pads) == 5
-            assert len(output_pads) == settings.NUM_OUTPUT_CHANNELS
+            assert len(core_link_pads) == 5 if reference_phy is not None else 4
+            assert len(output_pads) == num_outputs
             assert len(passthrough_sigs) == len(input_phys)
 
         # # #
@@ -92,11 +118,13 @@ class Entangler(Module):
             )
         )
 
-        read_en = self.rtlink.o.address[4]
+        read_en = self.rtlink.o.address[timing_bit_width + 1]  # MSB in address
         write_timings = Signal()
         self.comb += [
             self.rtlink.o.busy.eq(0),
-            write_timings.eq(self.rtlink.o.address[3:5] == 1),
+            write_timings.eq(
+                self.rtlink.o.address[timing_bit_width : timing_bit_width + 2] == 1
+            ),
         ]
 
         output_t_starts = [seq.m_start for seq in self.core.sequencers]
@@ -116,45 +144,41 @@ class Entangler(Module):
             self.core.msm.run_stb.eq((self.rtlink.o.address == 1) & self.rtlink.o.stb),
         ]
 
-        num_herald_patterns = settings.NUM_PATTERNS_ALLOWED
-        num_input_signals = settings.NUM_INPUT_SIGNALS
         herald_enable_bit_range = (
-            num_herald_patterns * num_input_signals,
-            num_herald_patterns * num_input_signals + num_herald_patterns,
+            num_herald_patterns * num_inputs,
+            num_herald_patterns * num_inputs + num_herald_patterns,
         )
         self.sync.rio += [
             If(
                 write_timings & self.rtlink.o.stb,
-                Case(self.rtlink.o.address[:3], cases),
+                Case(self.rtlink.o.address[0:timing_bit_width], cases),
             ),
             If(
                 (self.rtlink.o.address == settings.ADDRESS_WRITE.CONFIG)
-                & self.rtlink.o.stb,
+                & self.rtlink.o.stb,  # noqa: W503
                 # Write config
                 self.core.enable.eq(self.rtlink.o.data[0]),
                 self.core.msm.standalone.eq(self.rtlink.o.data[2]),
             ),
             If(
                 (self.rtlink.o.address == settings.ADDRESS_WRITE.TCYCLE)
-                & self.rtlink.o.stb,
+                & self.rtlink.o.stb,  # noqa: W503
                 # Write cycle length
                 self.core.msm.cycle_length_input.eq(self.rtlink.o.data[:10]),
             ),
             If(
                 (self.rtlink.o.address == settings.ADDRESS_WRITE.HERALD)
-                & self.rtlink.o.stb,
+                & self.rtlink.o.stb,  # noqa: W503
                 # Write herald patterns and enables
                 *[
                     self.core.heralder.patterns[i].eq(
-                        self.rtlink.o.data[
-                            num_input_signals * i : num_input_signals * (i + 1)  # noqa
-                        ]
+                        self.rtlink.o.data[num_inputs * i : num_inputs * (i + 1)]
                     )
                     for i in range(num_herald_patterns)
                 ],
                 self.core.heralder.pattern_ens.eq(
                     self.rtlink.o.data[
-                        herald_enable_bit_range[0] : herald_enable_bit_range[1]  # noqa
+                        herald_enable_bit_range[0] : herald_enable_bit_range[1]
                     ]
                 )
             ),
@@ -189,8 +213,11 @@ class Entangler(Module):
             If(
                 self.rtlink.o.stb,
                 read.eq(read_en),
-                read_timings.eq(self.rtlink.o.address[3:5] == 0b11),
-                read_addr.eq(self.rtlink.o.address[:3]),
+                read_timings.eq(
+                    self.rtlink.o.address[timing_bit_width : timing_bit_width + 2]
+                    == 0b11  # noqa: W503
+                ),
+                read_addr.eq(self.rtlink.o.address[:timing_bit_width]),
             ),
         ]
 
