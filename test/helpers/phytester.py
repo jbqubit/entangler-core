@@ -53,7 +53,7 @@ class PhyTestHarness(migen.Module):
         device_address = address & 0xFF
         channel = address >> 8
         _LOGGER.debug(
-            "Writing: (chan, addr, data) = %i, %i, %i", channel, device_address, data
+            "Writing: (chan, addr, data) = %i, %x, %x", channel, device_address, data
         )
         yield from rtio_output_event(self.core.rtlink, address, data)
         # wait 1 cycle for data to settle after sync logic
@@ -69,11 +69,11 @@ class PhyTestHarness(migen.Module):
         # HACK: sets an input buffer to the value read from the register.
         # essentially forces pass-by-ref
         # TODO: untested/might not work
-        _LOGGER.debug("Reading from address %i", address)
+        _LOGGER.debug("Reading from address %x", address)
         yield from rtio_output_event(self.core.rtlink, address, 0)
         yield
         data_ref[0] = yield self.core.rtlink.i.data
-        _LOGGER.debug("Read data: %i", data_ref[0])
+        _LOGGER.debug("Read data: %x", data_ref[0])
 
     def write_heralds(self, heralds: typing.Sequence[int] = None):
         """Set the heralding patterns for the Entangler via PHY interface."""
