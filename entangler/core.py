@@ -2,6 +2,7 @@
 
 Note: STB = "strobe", I forgot that one.
 """
+import logging
 import typing
 
 import migen.build.generic_platform as platform
@@ -21,6 +22,7 @@ from migen import Signal
 # be different from entangler-driven use, but this is only for auxiliary calibration
 # purposes.
 SEQUENCER_IDX_422ps = 2
+_LOGGER = logging.getLogger(__name__)
 
 
 class ChannelSequencer(Module):
@@ -529,6 +531,15 @@ class EntanglerCore(Module):
 
         assert len(input_phys) == settings.NUM_INPUT_SIGNALS  # noqa: E203
         use_reference_pulse = reference_phy is not None
+        if core_link_pads is None or len(core_link_pads) == 0:
+            _LOGGER.warning(
+                "No inter-Entangler pads provided. "
+                "Not enabling inter-Kasli communication"
+            )
+            core_comm_disabled = True
+        else:
+            assert len(core_link_pads) >= 5 if use_reference_pulse else 4
+            core_comm_disabled = False
 
         self.submodules.msm = MainStateMachine()
 
@@ -613,43 +624,44 @@ class EntanglerCore(Module):
                     io_IOB=pad.n,
                 )
 
-            # Interface between master and slave core.
+            if not core_comm_disabled:
+                # Interface between master and slave core.
 
-            # Slave -> master:
-            ts_buf(
-                core_link_pads[0],
-                self.msm.ready,
-                self.msm.slave_ready_raw,
-                ~self.msm.is_master & ~self.msm.standalone,
-            )
-
-            if use_reference_pulse:
+                # Slave -> master:
                 ts_buf(
-                    core_link_pads[4],
-                    local_422ps_out,
-                    slave_422ps_raw,
-                    ~self.msm.is_master,
+                    core_link_pads[0],
+                    self.msm.ready,
+                    self.msm.slave_ready_raw,
+                    ~self.msm.is_master & ~self.msm.standalone,
                 )
 
-            # Master -> slave:
-            ts_buf(
-                core_link_pads[1],
-                self.msm.trigger_out,
-                self.msm.trigger_in_raw,
-                self.msm.is_master,
-            )
-            ts_buf(
-                core_link_pads[2],
-                self.msm.success,
-                self.msm.success_in_raw,
-                self.msm.is_master,
-            )
-            ts_buf(
-                core_link_pads[3],
-                self.msm.timeout,
-                self.msm.timeout_in_raw,
-                self.msm.is_master,
-            )
+                if use_reference_pulse:
+                    ts_buf(
+                        core_link_pads[4],
+                        local_422ps_out,
+                        slave_422ps_raw,
+                        ~self.msm.is_master,
+                    )
+
+                # Master -> slave:
+                ts_buf(
+                    core_link_pads[1],
+                    self.msm.trigger_out,
+                    self.msm.trigger_in_raw,
+                    self.msm.is_master,
+                )
+                ts_buf(
+                    core_link_pads[2],
+                    self.msm.success,
+                    self.msm.success_in_raw,
+                    self.msm.is_master,
+                )
+                ts_buf(
+                    core_link_pads[3],
+                    self.msm.timeout,
+                    self.msm.timeout_in_raw,
+                    self.msm.is_master,
+                )
 
         # Connect heralder inputs.
         self.comb += self.heralder.sig.eq(Cat(*(g.triggered for g in self.apd_gaters)))

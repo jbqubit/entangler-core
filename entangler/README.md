@@ -7,6 +7,10 @@
 5 pins (Oxford) or 4 pins (UMD) are used for Master <-> Slave entangler communication. These must be connected
 to correctly synchronize the two devices/gateware modules.
 
+**NOTE:** Communication can be disabled by passing the PHY no
+``core_link_pad``s. This is good for maximizing output pins, if no
+inter-Entangler communication is needed.
+
 To do this:
     1. Build two gateware modules. Provide appropriate TTL/GPIO pins to communicate
         between the two modules.
