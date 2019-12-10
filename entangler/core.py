@@ -120,7 +120,7 @@ class TriggeredInputGater(Module):
 
         self.sync += [
             If(
-                phy_ref.stb_rising,
+                phy_ref.stb,
                 self.got_ref.eq(1),
                 self.ref_ts.eq(t_ref),
                 abs_gate_start.eq(self.gate_start + t_ref),
@@ -142,7 +142,7 @@ class TriggeredInputGater(Module):
 
         self.sync += [
             If(
-                phy_sig.stb_rising & ~self.triggered & triggering,
+                phy_sig.stb & ~self.triggered & triggering,
                 self.triggered.eq(triggering),
                 self.sig_ts.eq(t_sig),
             )
@@ -217,7 +217,7 @@ class UntriggeredInputGater(Module):
         self.sync += [
             # register input event
             If(
-                phy_sig.stb_rising & ~self.triggered & triggering,
+                phy_sig.stb & ~self.triggered & triggering,
                 self.triggered.eq(triggering),
                 self.sig_ts.eq(t_sig),
             )
