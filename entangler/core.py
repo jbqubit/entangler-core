@@ -5,8 +5,9 @@ Note: STB = "strobe", I forgot that one.
 import logging
 import typing
 
+import pkg_resources
 import migen.build.generic_platform as platform
-from dynaconf import settings
+from dynaconf import LazySettings
 from migen import Cat
 from migen import FSM
 from migen import If
@@ -21,6 +22,9 @@ from migen import Signal
 # with the master's signal as long as the entangler core isn't active. The timing will
 # be different from entangler-driven use, but this is only for auxiliary calibration
 # purposes.
+settings = LazySettings(
+    ROOT_PATH_FOR_DYNACONF=pkg_resources.resource_filename("entangler", "/")
+)
 SEQUENCER_IDX_422ps = 2
 _LOGGER = logging.getLogger(__name__)
 
@@ -503,7 +507,7 @@ class EntanglerCore(Module):
                 ``Entangler`` device.
             output_pads (typing.Sequence[platform.Pins]): The output pins that will
                 be driven by the state machines to output the entanglement generation
-                signals. Number is determined by ``settings.NUM_OUTPUT_CHANNELS``
+                signals. Number is determined by ``settings.NUM_OUTPUT_CHANNELS``.
             passthrough_sigs (typing.Sequence[Signal]): The signals that should be
                 passed through to the ``output_pads`` when the ``Entangler`` is not
                 running. Should be the same length as ``output_pads``.
@@ -540,6 +544,10 @@ class EntanglerCore(Module):
         else:
             assert len(core_link_pads) >= 5 if use_reference_pulse else 4
             core_comm_disabled = False
+
+        num_outputs = settings.NUM_OUTPUT_CHANNELS
+        use_running_output = len(output_pads) == num_outputs + 1
+        assert len(output_pads) in (num_outputs, num_outputs + 1)
 
         self.submodules.msm = MainStateMachine()
 
@@ -597,13 +605,14 @@ class EntanglerCore(Module):
             # Connect the "running" output, which is asserted when the core is
             # running, or controlled by the passthrough signal when the core is
             # not running.
-            # TODO: convert to settings
-            self.specials += Instance(
-                "OBUFDS",
-                i_I=Mux(self.msm.running, 1, passthrough_sigs[4]),
-                o_O=output_pads[-1].p,
-                o_OB=output_pads[-1].n,
-            )
+            if use_running_output:
+                _LOGGER.info("Using a 'RUNNING?' output, assigned to %s", output_pads[-1])
+                self.specials += Instance(
+                    "OBUFDS",
+                    i_I=Mux(self.msm.running, 1, passthrough_sigs[4]),
+                    o_O=output_pads[-1].p,
+                    o_OB=output_pads[-1].n,
+                )
 
             def ts_buf(pad, sig_o, sig_i, en_out):
                 # diff. IO.
